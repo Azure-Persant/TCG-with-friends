@@ -1,0 +1,23 @@
+{
+  "name": "@fci/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pulls the Grand Archive catalog and card images into our own database and storage.",
+  "scripts": {
+    "ingest": "tsx src/cli.ts",
+    "catalog": "tsx src/cli.ts catalog",
+    "images": "tsx src/cli.ts images",
+    "all": "tsx src/cli.ts all",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

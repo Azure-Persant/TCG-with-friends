@@ -274,25 +274,52 @@ re-runs when new sets release.
 
 ## Open questions
 
-1. **Confirm GATCG's terms permit mirroring their card images** before running
-   the full backfill (22). Self-hosting is the right architecture regardless;
-   this is about whether redistribution is permitted, and is worth a direct ask
-   to the maintainers.
+None blocking. The image-mirroring question was resolved by precedent —
+shoutyourdeck.com, fractalofin.site and silvie.gg all mirror the same catalog.
+The concern that actually mattered was never legal but architectural: not
+pulling from gatcg.com on every page view, which (17) and (22) settle.
 
 ## Implementation
 
-- **`db/schema.sql`** — PostgreSQL schema implementing every decision above.
-  Comments cite decision numbers.
-- **`db/tests/schema_smoke.sql`** — walks a full loan lifecycle (loan → accept
-  → sub-loan transfer → return with condition downgrade → force-close) and
-  asserts that the constraints reject the things they are supposed to reject.
-  Runs in a transaction and rolls back.
+| File | What |
+|---|---|
+| `db/schema.sql` | Schema for every decision above. Portable Postgres, no Supabase dependency. |
+| `db/policies.sql` | Row Level Security. **Required on Supabase.** |
+| `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
+| `db/tests/schema_smoke.sql` | Full loan lifecycle + 21 constraint rejections. |
+| `db/tests/rls_smoke.sql` | Owner / friend / stranger visibility, as an unprivileged role. |
+| `ingest/` | GATCG catalog + image worker. See `ingest/README.md`. |
+| `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
-```
+```bash
 createdb fci
 psql -d fci -v ON_ERROR_STOP=1 -f db/schema.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/local/auth_shim.sql   # local only
+psql -d fci -v ON_ERROR_STOP=1 -f db/policies.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/tests/schema_smoke.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rls_smoke.sql
 ```
+
+### RLS is not optional on Supabase
+
+Supabase clients talk straight to Postgres through PostgREST. The views control
+the *shape* of what a friend sees; RLS controls whether they can read the
+underlying tables at all. Without `db/policies.sql`, anyone holding the anon
+key can read every holding, location and loan in the database.
+
+### The privacy rule nearly destroyed the feature it qualifies
+
+`friend_visible_holding` derives `qty_on_loan` by joining `location` and
+counting holder-kind rows. But (14) forbids a friend from reading the owner's
+locations — that is the rule hiding *who* has a card.
+
+Run the view as the caller and those two facts collide: the join matches
+nothing, every row disappears, and a friend sees an empty inventory. Caught by
+`db/tests/rls_smoke.sql`, which asserted 4-total/1-on-loan and got nothing.
+
+The view therefore runs with its owner's rights and performs its own
+friendship-and-sharing check in its `WHERE` clause. **That clause is the entire
+access control for the view** and must be kept in sync with (1) and (4).
 
 ### One rule the schema discovered
 

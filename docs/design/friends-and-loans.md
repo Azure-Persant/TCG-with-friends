@@ -145,24 +145,43 @@ and later pricing possible.
 
 **Cost:** an import pipeline is required per game before that game is usable.
 
+### 13. The lender sets condition at receipt
+
+The loan records the condition each card was in when it left. At receipt
+confirmation (6) the lender confirms that condition or downgrades it, and the
+card files into the matching bucket.
+
+**Why:** condition is part of the bucket key (8), so a card returned in worse
+shape genuinely does not belong in the bucket it left. Recording the departure
+condition on the loan also means damage shows up as visible history rather
+than a silent edit.
+
+### 14. Friends see cards and quantities, never locations
+
+For a game shared under (4), a friend sees which cards you own, how many, and
+in what condition — aggregated across your locations. They never see *where*
+anything is stored.
+
+Quantities are the part that matters for deciding what to ask to borrow.
+Locations are security-sensitive and stay private even from friends.
+
+### 15. Force-close is per card
+
+The lender's escape hatch (5) settles **individual outstanding cards**, not a
+whole loan. This matches per-card returns (11): write off the 2 cards that
+never came back without falsifying the 58 that did.
+
 ## Open questions
 
 Blocking further schema work.
 
-1. **Who sets condition when a card comes back, and what if it changed?**
-   Because condition is part of the bucket key (8), a card returned in worse
-   shape belongs in a *different* bucket than the one it left. Does the lender
-   set condition at receipt confirmation? Is the original condition recorded on
-   the loan so a downgrade is visible?
-2. **What does a friend actually see for a visible game?** Just which cards you
-   own, or also quantities, conditions, and locations? Locations arguably stay
-   private even for a shared game. Also: is a card that's currently on loan
-   shown to friends as such?
-3. **Force-close granularity against a batch loan.** Does the lender's
-   force-close (5) settle an entire loan at once, or individual outstanding
-   cards within it?
-4. **Can a borrower loan onward?** If someone borrows your deck, can they lend
+1. **Which game does the catalog pipeline target first?** Not Magic, Pokémon,
+   or sports — an IP still to be named. (12) needs at least one real import
+   pipeline before any game is usable, and catalog data quality varies wildly
+   between IPs.
+2. **Are cards currently on loan shown to friends?** A friend browsing a shared
+   game sees quantities (14). Does a copy that's out on loan still count toward
+   the number they see, and is its loaned status visible to them?
+3. **Can a borrower loan onward?** If someone borrows your deck, can they lend
    one of its cards to a third person? Almost certainly no — but it should be
    an explicit rule, since the borrower does hold the card.
-5. **Which games ship first, and from which catalog source?** (12) needs at
-   least one real import pipeline to be useful at all.

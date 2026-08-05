@@ -11,6 +11,7 @@ CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive email
 
 -- ---------------------------------------------------------------------------
 -- Enums
+
 -- ---------------------------------------------------------------------------
 
 -- Physical grading scale. Part of the holding bucket key (8).
@@ -24,9 +25,34 @@ CREATE TYPE card_finish AS ENUM ('NONFOIL', 'FOIL');
 -- "On loan" is NOT a value here — it is derived from kind = 'holder'.
 CREATE TYPE location_kind AS ENUM ('physical', 'holder');
 
-CREATE TYPE friendship_status AS ENUM ('pending', 'accepted');
+-- Every pending approval in the app is a `request` row (23). Friendship,
+-- loans, borrows, trades and sub-loan transfers all share this one lifecycle.
+CREATE TYPE request_kind AS ENUM (
+  'friend',          -- be my friend (1)
+  'loan_offer',      -- I am lending you these (2)
+  'borrow_request',  -- may I borrow these? (28)
+  'trade_offer',     -- swap these for those (24)
+  'sub_loan'         -- may I pass this on to someone else? (18)
+);
 
-CREATE TYPE loan_status AS ENUM ('pending', 'active', 'declined', 'cancelled', 'closed');
+CREATE TYPE request_status AS ENUM (
+  'pending',
+  'accepted',
+  'declined',
+  'cancelled',    -- withdrawn by the proposer
+  'superseded'    -- replaced by a counter-offer (25)
+);
+
+-- Note the absence of 'pending' and 'declined'. A loan that has not been
+-- accepted yet is a request, not a loan -- it has no row here at all, which is
+-- what makes "a pending loan moves no inventory" (2) structurally true rather
+-- than a rule someone has to remember to enforce.
+CREATE TYPE loan_status AS ENUM ('active', 'cancelled', 'closed');
+
+CREATE TYPE trade_status AS ENUM ('settling', 'completed', 'closed');
+
+-- A trade moves one physical card between two accounts (24).
+CREATE TYPE trade_item_status AS ENUM ('in_transit', 'received', 'written_off');
 
 CREATE TYPE loan_line_status AS ENUM ('outstanding', 'in_transit', 'returned', 'written_off');
 
@@ -35,8 +61,6 @@ CREATE TYPE loan_close_reason AS ENUM (
   'force_closed_returned',     -- lender's escape hatch, card is back (5, 15)
   'force_closed_written_off'   -- lender's escape hatch, card is gone (5, 15)
 );
-
-CREATE TYPE transfer_status AS ENUM ('pending', 'approved', 'rejected', 'cancelled');
 
 CREATE TYPE sync_status AS ENUM ('running', 'succeeded', 'failed');
 
@@ -175,17 +199,18 @@ CREATE TABLE account (
 -- Friendship is mutual and accepted (1), so it is ONE row, not two.
 -- The pair is stored in a canonical order to make that structurally true:
 -- (a,b) and (b,a) cannot both exist. Direction lives in requested_by_id.
+-- An ACCEPTED friendship. There is no pending state here any more -- a
+-- friend request is a `request` row (23), and this row is created the moment
+-- it is accepted. Every row in this table is a live friendship, which is why
+-- app_is_friend() no longer has to filter on status.
 CREATE TABLE friendship (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_lo_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
   account_hi_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
-  status           friendship_status NOT NULL DEFAULT 'pending',
-  requested_by_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
-  requested_at     timestamptz NOT NULL DEFAULT now(),
-  responded_at     timestamptz,
-  CONSTRAINT friendship_ordered   CHECK (account_lo_id < account_hi_id),
-  CONSTRAINT friendship_requester CHECK (requested_by_id IN (account_lo_id, account_hi_id)),
-  CONSTRAINT friendship_responded CHECK ((status = 'pending') = (responded_at IS NULL)),
+  -- Which request created it, kept so "friends since" can cite the exchange.
+  created_from_request_id uuid,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT friendship_ordered CHECK (account_lo_id < account_hi_id),
   UNIQUE (account_lo_id, account_hi_id)
 );
 
@@ -295,10 +320,12 @@ CREATE TABLE loan (
   -- Who it was handed to originally. Individual lines may since have moved on
   -- to other holders via approved transfers (18, 19).
   initial_holder_location_id uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
-  status                     loan_status NOT NULL DEFAULT 'pending',
+  status                     loan_status NOT NULL DEFAULT 'active',
+  -- The request that was accepted to create this loan. NULL for a loan to a
+  -- bare name, which has nobody to accept it and so skips requests entirely (3).
+  created_from_request_id    uuid,
   note                       text,
   created_at                 timestamptz NOT NULL DEFAULT now(),
-  accepted_at                timestamptz,   -- NULL for text loans, which skip acceptance (3)
   closed_at                  timestamptz,
   CONSTRAINT loan_closed CHECK ((status = 'closed') = (closed_at IS NOT NULL))
 );
@@ -387,27 +414,194 @@ CREATE TABLE loan_transfer (
   from_location_id         uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
   to_location_id           uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
   initiated_by_account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
-  status                   transfer_status NOT NULL DEFAULT 'pending',
-  owner_approved_at        timestamptz,
-  -- NULL for a text-name recipient, who cannot accept anything (3).
-  recipient_accepted_at    timestamptz,
-  resolved_at              timestamptz,
-  created_at               timestamptz NOT NULL DEFAULT now(),
+  -- Which request the owner approved to allow this. NULL only for transfers
+  -- the owner performs directly on their own loan.
+  approved_from_request_id uuid,
+  approved_at              timestamptz NOT NULL DEFAULT now(),
 
-  CONSTRAINT transfer_distinct CHECK (from_location_id <> to_location_id),
-  CONSTRAINT transfer_resolved CHECK ((status = 'pending') = (resolved_at IS NULL)),
-  CONSTRAINT transfer_approval CHECK (
-    status <> 'approved' OR owner_approved_at IS NOT NULL)
+  CONSTRAINT transfer_distinct CHECK (from_location_id <> to_location_id)
 );
 
--- At most one transfer in flight per card.
-CREATE UNIQUE INDEX loan_transfer_one_pending
-  ON loan_transfer (loan_line_id) WHERE status = 'pending';
+-- This table is now APPROVED transfers only -- it is the custody trail (19),
+-- not a workflow. A transfer awaiting approval is a pending `request` (23).
 
+-- "At most one transfer in flight per card" used to be a partial unique index
+-- here. It cannot be, now that pending lives in `request`: the rule spans two
+-- tables, which no single index can express. app_request_transfer() enforces
+-- it instead, and db/tests/request_smoke.sql holds it honest.
 CREATE INDEX loan_transfer_line_idx ON loan_transfer (loan_line_id);
+
+-- ---------------------------------------------------------------------------
+-- Requests: one lifecycle for every pending approval (23)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE request (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind                 request_kind NOT NULL,
+  proposer_account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  recipient_account_id uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  status               request_status NOT NULL DEFAULT 'pending',
+  note                 text,
+  -- A counter-offer is a NEW request that supersedes the one it replaces (25),
+  -- so the accepted terms are always exactly the terms that were displayed.
+  supersedes_id        uuid REFERENCES request(id) ON DELETE SET NULL,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  resolved_at          timestamptz,
+
+  CONSTRAINT request_distinct CHECK (proposer_account_id <> recipient_account_id),
+  CONSTRAINT request_resolved CHECK ((status = 'pending') = (resolved_at IS NULL))
+);
+
+-- At most one pending request of a kind between the same two people in the
+-- same direction. Without this, tapping "add friend" twice creates two
+-- inbox entries that both resolve to the same friendship.
+CREATE UNIQUE INDEX request_one_pending
+  ON request (kind, proposer_account_id, recipient_account_id)
+  WHERE status = 'pending';
+
+CREATE INDEX request_inbox ON request (recipient_account_id, status, created_at DESC);
+CREATE INDEX request_outbox ON request (proposer_account_id, status, created_at DESC);
+
+-- Cards attached to a loan_offer or borrow_request.
+CREATE TABLE request_loan_item (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id         uuid NOT NULL REFERENCES request(id) ON DELETE CASCADE,
+  edition_id         uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  finish             card_finish NOT NULL,
+  condition          card_condition NOT NULL,
+  qty                integer NOT NULL,
+  -- Which box the cards come out of. Set on a loan_offer, where the lender is
+  -- proposing. NULL on a borrow_request: the borrower is asking for a card and
+  -- has no idea (and no right to know) which box it lives in (14). The owner
+  -- picks the origin when they approve.
+  origin_location_id uuid REFERENCES location(id) ON DELETE RESTRICT,
+
+  CONSTRAINT request_loan_item_qty CHECK (qty > 0)
+);
+
+CREATE INDEX request_loan_item_req ON request_loan_item (request_id);
+
+-- Cards attached to a trade_offer, on both sides of the swap.
+CREATE TABLE request_trade_item (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id    uuid NOT NULL REFERENCES request(id) ON DELETE CASCADE,
+  -- true  = the proposer is giving this away
+  -- false = the proposer is asking for it
+  from_proposer boolean NOT NULL,
+  edition_id    uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  finish        card_finish NOT NULL,
+  condition     card_condition NOT NULL,
+  qty           integer NOT NULL,
+
+  CONSTRAINT request_trade_item_qty CHECK (qty > 0)
+);
+
+CREATE INDEX request_trade_item_req ON request_trade_item (request_id);
+
+-- The target of a sub-loan request (18, 20).
+CREATE TABLE request_sub_loan (
+  request_id            uuid PRIMARY KEY REFERENCES request(id) ON DELETE CASCADE,
+  loan_line_id          uuid NOT NULL REFERENCES loan_line(id) ON DELETE CASCADE,
+  to_holder_account_id  uuid REFERENCES account(id) ON DELETE CASCADE,
+  to_holder_name        text,
+
+  CONSTRAINT sub_loan_target CHECK (num_nonnulls(to_holder_account_id, to_holder_name) = 1)
+);
+
+-- ---------------------------------------------------------------------------
+-- Listings: a signal, not a gate (27)
+-- ---------------------------------------------------------------------------
+
+-- Keyed on (account, edition, finish) and deliberately NOT on a holding.
+-- Holdings are split by location and condition; tying a listing to one would
+-- mean moving a card between boxes silently drops its listing. Location is
+-- also private (14), so listing data must not hang off a location-keyed row.
+CREATE TABLE listing (
+  account_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  edition_id    uuid NOT NULL REFERENCES card_edition(id) ON DELETE CASCADE,
+  finish        card_finish NOT NULL,
+  for_trade     boolean NOT NULL DEFAULT false,
+  for_sale      boolean NOT NULL DEFAULT false,
+  -- Intent only. There is no in-app payment, order or sold state -- see the
+  -- open question in docs/design/friends-and-loans.md.
+  asking_price  numeric(10,2),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+
+  PRIMARY KEY (account_id, edition_id, finish),
+  -- A row that offers nothing is just clutter; delete it instead.
+  CONSTRAINT listing_offers_something CHECK (for_trade OR for_sale),
+  CONSTRAINT listing_price_sane CHECK (asking_price IS NULL OR asking_price >= 0)
+);
+
+CREATE INDEX listing_by_edition ON listing (edition_id, finish) WHERE for_trade OR for_sale;
+
+-- ---------------------------------------------------------------------------
+-- Trades: the only thing that moves cards between accounts (24)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE trade (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_from_request_id uuid NOT NULL REFERENCES request(id) ON DELETE RESTRICT,
+  proposer_account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  recipient_account_id uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  status               trade_status NOT NULL DEFAULT 'settling',
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  completed_at         timestamptz,
+
+  CONSTRAINT trade_distinct CHECK (proposer_account_id <> recipient_account_id),
+  CONSTRAINT trade_completed CHECK ((status = 'settling') = (completed_at IS NULL))
+);
+
+-- One physical card in transit between two accounts.
+--
+-- One row per card, for the same reason loan_line is one row per card (13):
+-- the RECEIVER sets the condition on arrival, and two copies sent together can
+-- arrive in different shape.
+CREATE TABLE trade_item (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trade_id             uuid NOT NULL REFERENCES trade(id) ON DELETE CASCADE,
+  from_account_id      uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  to_account_id        uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  edition_id           uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  finish               card_finish NOT NULL,
+  departure_condition  card_condition NOT NULL,
+  -- Where the card sits in the SENDER's inventory while in transit: a holder
+  -- location naming the receiver, exactly as a loan would use (10). This is
+  -- why an in-flight trade still shows up as "with Sarah" rather than
+  -- vanishing from the sender's collection.
+  holder_location_id   uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+  status               trade_item_status NOT NULL DEFAULT 'in_transit',
+  received_condition   card_condition,
+  received_location_id uuid REFERENCES location(id) ON DELETE RESTRICT,
+  received_at          timestamptz,
+
+  CONSTRAINT trade_item_distinct CHECK (from_account_id <> to_account_id),
+  CONSTRAINT trade_item_received CHECK (
+    (status = 'received') =
+    (received_at IS NOT NULL AND received_condition IS NOT NULL
+     AND received_location_id IS NOT NULL))
+);
+
+CREATE INDEX trade_item_trade ON trade_item (trade_id);
+CREATE INDEX trade_item_inbound ON trade_item (to_account_id, status);
+
+-- Back-references to the request that created each of these. Added here
+-- because `request` is defined after the tables that point at it.
+ALTER TABLE friendship
+  ADD CONSTRAINT friendship_from_request
+  FOREIGN KEY (created_from_request_id) REFERENCES request(id) ON DELETE SET NULL;
+
+ALTER TABLE loan
+  ADD CONSTRAINT loan_from_request
+  FOREIGN KEY (created_from_request_id) REFERENCES request(id) ON DELETE SET NULL;
+
+ALTER TABLE loan_transfer
+  ADD CONSTRAINT transfer_from_request
+  FOREIGN KEY (approved_from_request_id) REFERENCES request(id) ON DELETE SET NULL;
 
 -- ===========================================================================
 -- VIEWS
+
 -- ===========================================================================
 
 -- What a friend is allowed to see for a shared game (14): cards, quantities,
@@ -458,9 +652,9 @@ WHERE ll.status IN ('outstanding', 'in_transit');
 --
 --  a. (2)  Creating a loan against an account-linked holder requires an
 --          accepted friendship. Sub-loan recipients are exempt (20).
---  b. (2)  A pending loan grants nothing: lines stay outstanding and no
---          holding moves until the borrower accepts. Text loans (3) skip
---          straight to active.
+--  b. (2)  STRUCTURAL NOW, not enforced: an unaccepted loan has no `loan` row
+--          at all, only a pending `request`, so there is nothing that could
+--          move a holding. Kept listed because the guarantee still matters.
 --  c. (10) Accepting a loan moves qty from the origin physical bucket into the
 --          holder bucket. Confirming receipt moves it back — to the suggested
 --          origin unless the lender overrides.
@@ -473,4 +667,12 @@ WHERE ll.status IN ('outstanding', 'in_transit');
 --          between holder buckets, and leaves the loan_transfer row as history.
 --  h. (11) A loan closes when its last line closes.
 --  i. (12) Catalog tables are written only by the ingest, never by users.
+--  j. (23) Every pending approval is a `request` row. Accepting one is the
+--          only thing that creates a loan, friendship, trade or transfer.
+--  k. (25) Accepting a request applies exactly the terms it carries. A change
+--          supersedes it with a new request rather than editing in place.
+--  l. (24) A trade moves cards between two ACCOUNTS — the only operation that
+--          does. Each side settles independently; neither moves on acceptance.
+--  m. (27) A listing never gates a request. It only decides whether the
+--          owner's notification carries an "not offered" warning.
 -- ===========================================================================

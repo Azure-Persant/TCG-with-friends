@@ -7,6 +7,9 @@ future me.
 implemented as Postgres functions, catalog ingest working.
 **No UI code exists yet.**
 
+Loans, borrows, trades, friend requests and sub-loans are all implemented and
+tested. 57 assertions across four suites.
+
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
 **invariants enforced in Postgres RPC** rather than app code.
@@ -149,6 +152,31 @@ table must do it through a `SECURITY DEFINER` helper (`app_is_lender_of_loan`,
 Those run with the definer's rights, so the inner query skips RLS and the cycle
 breaks. Do not inline those `EXISTS` clauses back into a policy.
 
+### One request table, or five copies of the same flow
+
+Friend requests, loan acceptances and sub-loan transfers were each built with
+their own table and their own accept/decline path. Adding trades and borrows
+would have made five — five inbox surfaces, five notification paths, five sets
+of expiry rules, all of which must behave identically to a user.
+
+They are now one `request` table with a `kind` (23). Only the approval
+lifecycle is shared; the payload and the effect of accepting stay per-kind, in
+tables that point back at the request.
+
+**The refactor paid for itself immediately.** Because a request now owns the
+pending state, `loan` no longer has one: an unaccepted loan has no row in
+`loan` at all. Invariant (b) — "a pending loan moves no inventory" — stopped
+being a rule anyone can break and became a fact about the schema. The same
+applies to `loan_transfer`, which is now purely the custody trail (19) rather
+than a workflow with a status column.
+
+**What it cost:** every existing test had to be rewritten, and one rule got
+weaker. "At most one transfer in flight per card" used to be a partial unique
+index; it now spans `request` and `request_sub_loan`, which no index can
+express, so `app_request_sub_loan()` enforces it instead. A rule enforced in a
+function is a rule that can be bypassed by a new code path — that one needs
+watching.
+
 ### Empty buckets must be deleted, not zeroed
 
 `qty > 0` is enforced, so decrementing a bucket to zero is rejected outright.
@@ -168,7 +196,8 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
 | `db/tests/schema_smoke.sql` | Full loan lifecycle + 21 constraint rejections. |
 | `db/tests/rls_smoke.sql` | Owner / friend / stranger visibility, as an unprivileged role. |
-| `db/tests/rpc_smoke.sql` | Full lifecycle driven through the RPCs, as an unprivileged role. |
+| `db/tests/rpc_smoke.sql` | Full loan lifecycle through the RPCs, as an unprivileged role. |
+| `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
@@ -265,9 +294,19 @@ else about the card is the lender's.
    `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
    `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
    so this is UI over a tested backend.
-4. **Notifications** — loan requests, returns, transfer approvals. **No design
-   exists yet**, and every flow above assumes something will tell the other
-   person. This is the next thing to grill.
+4. **Notifications** — still the largest gap, and (23) has changed its shape
+   for the better: there is now exactly one table to watch and one place to
+   emit from, rather than five. Every flow assumes something tells the other
+   person; nothing does yet.
+
+**Before building the listing UI, settle one thing:** whether "for sale" ever
+involves money in the app. Everything is currently built on *no* — a listing
+is an intent marker with an optional asking price, and the transaction happens
+between two people who know each other. That is the strict subset, so nothing
+is wasted if the answer changes, but a real sale flow (price, sold state,
+copies leaving inventory, possibly payment) is a materially larger feature
+that needs its own decisions. It is recorded as the one open question in the
+design doc.
 5. **Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
    since it's already keyed the way prices are quoted.
 

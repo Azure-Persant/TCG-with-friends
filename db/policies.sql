@@ -28,11 +28,45 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  -- No status filter: every row in `friendship` is an accepted friendship
+  -- now that pending lives in `request` (23).
   SELECT EXISTS (
     SELECT 1 FROM friendship f
-     WHERE f.status = 'accepted'
-       AND least(auth.uid(), other) = f.account_lo_id
+     WHERE least(auth.uid(), other) = f.account_lo_id
        AND greatest(auth.uid(), other) = f.account_hi_id
+  );
+$$;
+
+-- Payload tables are guarded by their parent request. SECURITY DEFINER for the
+-- usual reason: an inline EXISTS against `request` would re-enter request's own
+-- policy from a child table's policy.
+CREATE OR REPLACE FUNCTION app_can_see_request(p_request uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM request r
+     WHERE r.id = p_request
+       AND auth.uid() IN (r.proposer_account_id, r.recipient_account_id)
+  );
+$$;
+
+-- Is there a live request between me and `other`, in either direction?
+CREATE OR REPLACE FUNCTION app_has_pending_request_with(other uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM request r
+     WHERE r.status = 'pending'
+       AND (   (r.proposer_account_id = auth.uid() AND r.recipient_account_id = other)
+            OR (r.recipient_account_id = auth.uid() AND r.proposer_account_id = other))
   );
 $$;
 
@@ -105,25 +139,24 @@ ALTER TABLE game_share ENABLE ROW LEVEL SECURITY;
 -- You can see yourself, and anyone you are already friends with. Finding new
 -- people to befriend goes through a SECURITY DEFINER search function, not by
 -- opening the whole account table to enumeration.
+-- Also visible while a request is in flight between you. Without this clause
+-- an incoming friend request from someone you do not know yet renders with no
+-- display name -- the recipient cannot read the proposer's account row,
+-- because they are not friends. That is the whole point of the request.
 CREATE POLICY account_self_or_friend ON account
-  FOR SELECT USING (id = auth.uid() OR app_is_friend(id));
+  FOR SELECT USING (
+    id = auth.uid()
+    OR app_is_friend(id)
+    OR app_has_pending_request_with(id));
 
 CREATE POLICY account_update_self ON account
   FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
 
--- Both parties can see the friendship, pending or accepted (1).
+-- Both parties can see the friendship. SELECT only, and deliberately so:
+-- a friendship is created by accepting a `request` (23) and removed only by
+-- app_unfriend(), which refuses while cards are outstanding (5).
 CREATE POLICY friendship_visible ON friendship
   FOR SELECT USING (auth.uid() IN (account_lo_id, account_hi_id));
-
-CREATE POLICY friendship_request ON friendship
-  FOR INSERT WITH CHECK (
-    requested_by_id = auth.uid() AND auth.uid() IN (account_lo_id, account_hi_id));
-
--- Accepting or declining a request. There is deliberately NO delete policy:
--- unfriending goes through app_unfriend(), which refuses while cards are
--- still outstanding in either direction (5).
-CREATE POLICY friendship_respond ON friendship
-  FOR UPDATE USING (auth.uid() IN (account_lo_id, account_hi_id));
 
 CREATE POLICY game_share_own ON game_share
   FOR ALL USING (account_id = auth.uid()) WITH CHECK (account_id = auth.uid());
@@ -312,3 +345,47 @@ WHERE h.account_id = auth.uid() OR app_is_friend(h.account_id)
 GROUP BY h.account_id, c.game_id, e.card_id, h.edition_id, h.finish, h.condition;
 
 ALTER VIEW friend_visible_holding SET (security_invoker = false);
+
+-- ---------------------------------------------------------------------------
+-- Requests, listings and trades (23, 24, 27)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE request            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_loan_item  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_trade_item ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_sub_loan   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE listing            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trade              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trade_item         ENABLE ROW LEVEL SECURITY;
+
+-- Both parties see the request; nobody writes one directly (23).
+CREATE POLICY request_visible ON request
+  FOR SELECT USING (
+    auth.uid() IN (proposer_account_id, recipient_account_id));
+
+CREATE POLICY request_loan_item_visible ON request_loan_item
+  FOR SELECT USING (app_can_see_request(request_id));
+
+CREATE POLICY request_trade_item_visible ON request_trade_item
+  FOR SELECT USING (app_can_see_request(request_id));
+
+CREATE POLICY request_sub_loan_visible ON request_sub_loan
+  FOR SELECT USING (app_can_see_request(request_id));
+
+-- Listings carry no cross-account invariant -- they are a signal, not a gate
+-- (27) -- so unlike holdings they stay directly writable by their owner.
+CREATE POLICY listing_own ON listing
+  FOR ALL USING (account_id = auth.uid()) WITH CHECK (account_id = auth.uid());
+
+-- A friend sees a listing only for a game you share (4), same rule as holdings.
+CREATE POLICY listing_friend_read ON listing
+  FOR SELECT USING (
+    account_id <> auth.uid()
+    AND app_is_friend(account_id)
+    AND app_shares_edition(account_id, edition_id));
+
+CREATE POLICY trade_visible ON trade
+  FOR SELECT USING (auth.uid() IN (proposer_account_id, recipient_account_id));
+
+CREATE POLICY trade_item_visible ON trade_item
+  FOR SELECT USING (auth.uid() IN (from_account_id, to_account_id));

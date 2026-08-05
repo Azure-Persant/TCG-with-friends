@@ -63,6 +63,9 @@ jobs:
       - name: Mutation RPC tests
         run: $PSQL -f db/tests/rpc_smoke.sql
 
+      - name: Request, trade and listing tests
+        run: $PSQL -f db/tests/request_smoke.sql
+
       # functions.sql is all CREATE OR REPLACE, so re-applying it to a live
       # database must be safe -- that is how it will be deployed. (policies.sql
       # is NOT idempotent: CREATE POLICY has no IF NOT EXISTS, so it is not
@@ -71,6 +74,7 @@ jobs:
         run: |
           $PSQL -f db/functions.sql
           $PSQL -f db/tests/rpc_smoke.sql
+          $PSQL -f db/tests/request_smoke.sql
 
   ingest:
     name: Ingest worker

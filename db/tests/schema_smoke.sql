@@ -68,26 +68,23 @@ INSERT INTO account (id, email, display_name) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000002', 'sarah@example.com',  'Sarah'),
   ('aaaaaaaa-0000-0000-0000-000000000003', 'mike@example.com',   'Mike');
 
-INSERT INTO friendship (account_lo_id, account_hi_id, status, requested_by_id, responded_at)
+INSERT INTO friendship (account_lo_id, account_hi_id)
 VALUES ('aaaaaaaa-0000-0000-0000-000000000001',
-        'aaaaaaaa-0000-0000-0000-000000000002',
-        'accepted', 'aaaaaaaa-0000-0000-0000-000000000001', now());
+        'aaaaaaaa-0000-0000-0000-000000000002');
 
 -- (1) Friendship is one row, canonically ordered — the reverse pair cannot exist.
 SELECT pg_temp.must_fail($$
-  INSERT INTO friendship (account_lo_id, account_hi_id, requested_by_id)
+  INSERT INTO friendship (account_lo_id, account_hi_id)
   VALUES ('aaaaaaaa-0000-0000-0000-000000000002',
-          'aaaaaaaa-0000-0000-0000-000000000001',
-          'aaaaaaaa-0000-0000-0000-000000000002')
+          'aaaaaaaa-0000-0000-0000-000000000001')
 $$, '(1) reversed duplicate friendship');
 
--- (1) A pending friendship may not carry a response timestamp.
+-- (1) Nobody is their own friend. The ordering constraint gives this for free.
 SELECT pg_temp.must_fail($$
-  INSERT INTO friendship (account_lo_id, account_hi_id, requested_by_id, responded_at)
+  INSERT INTO friendship (account_lo_id, account_hi_id)
   VALUES ('aaaaaaaa-0000-0000-0000-000000000001',
-          'aaaaaaaa-0000-0000-0000-000000000003',
-          'aaaaaaaa-0000-0000-0000-000000000001', now())
-$$, '(1) pending friendship with responded_at');
+          'aaaaaaaa-0000-0000-0000-000000000001')
+$$, '(1) friendship with yourself');
 
 -- Act as Owner for the rest of the script.
 --
@@ -190,10 +187,13 @@ $$, '(8) duplicate bucket key');
 -- Loan lifecycle (2, 6, 10, 11, 13)
 -- ---------------------------------------------------------------------------
 
+-- Note 'active', not 'pending'. A loan that has not been accepted has no row
+-- at all now -- it is a pending `request` (23), which is what makes "a pending
+-- loan moves no inventory" (2) impossible to get wrong.
 INSERT INTO loan (id, lender_account_id, initial_holder_location_id, status)
 VALUES ('dddddddd-0000-0000-0000-000000000001',
         'aaaaaaaa-0000-0000-0000-000000000001',
-        'cccccccc-0000-0000-0000-000000000001', 'pending');
+        'cccccccc-0000-0000-0000-000000000001', 'active');
 
 -- Two physical cards handed over together = two lines (11, 13).
 INSERT INTO loan_line (id, loan_id, edition_id, finish, origin_location_id,
@@ -207,10 +207,7 @@ VALUES ('eeeeeeee-0000-0000-0000-000000000001', 'dddddddd-0000-0000-0000-0000000
         'bbbbbbbb-0000-0000-0000-000000000001', 'NM',
         'cccccccc-0000-0000-0000-000000000001');
 
--- Borrower accepts (2); the quantity physically moves (10).
-UPDATE loan SET status = 'active', accepted_at = now()
- WHERE id = 'dddddddd-0000-0000-0000-000000000001';
-
+-- The loan is live, so the quantity physically moves (10).
 UPDATE holding SET qty = qty - 2
  WHERE account_id = 'aaaaaaaa-0000-0000-0000-000000000001'
    AND edition_id = '44444444-4444-4444-4444-444444444444'
@@ -277,28 +274,24 @@ VALUES ('ffffffff-0000-0000-0000-000000000001',
         'cccccccc-0000-0000-0000-000000000002',
         'aaaaaaaa-0000-0000-0000-000000000002');
 
--- Only one transfer may be in flight per card.
+-- "Only one transfer in flight per card" is NOT asserted here any more, and
+-- deliberately not: a card legitimately accumulates several history rows over
+-- its life. The one-in-flight rule now spans request and request_sub_loan, so
+-- no constraint can carry it -- app_request_sub_loan() enforces it, and
+-- db/tests/request_smoke.sql is where that is proven.
+
+-- A transfer to the place it already is makes no sense (19).
 SELECT pg_temp.must_fail($$
   INSERT INTO loan_transfer (loan_line_id, from_location_id, to_location_id,
                              initiated_by_account_id)
   VALUES ('eeeeeeee-0000-0000-0000-000000000001',
           'cccccccc-0000-0000-0000-000000000001',
-          'cccccccc-0000-0000-0000-000000000002',
+          'cccccccc-0000-0000-0000-000000000001',
           'aaaaaaaa-0000-0000-0000-000000000002')
-$$, '(18) second pending transfer for the same card');
+$$, '(19) transfer from a location to itself');
 
--- A transfer cannot be approved without the owner's approval (18).
-SELECT pg_temp.must_fail($$
-  UPDATE loan_transfer SET status = 'approved', resolved_at = now()
-   WHERE id = 'ffffffff-0000-0000-0000-000000000001'
-$$, '(18) transfer approved without owner_approved_at');
-
--- Owner approves: custody moves, previous holder is released (19).
-UPDATE loan_transfer
-   SET status = 'approved', owner_approved_at = now(),
-       recipient_accepted_at = NULL, resolved_at = now()
- WHERE id = 'ffffffff-0000-0000-0000-000000000001';
-
+-- loan_transfer is the custody trail now, not a workflow (19, 23): a row here
+-- IS an approved transfer, so there is no status to check. Custody moves.
 UPDATE loan_line SET holder_location_id = 'cccccccc-0000-0000-0000-000000000002'
  WHERE id = 'eeeeeeee-0000-0000-0000-000000000001';
 

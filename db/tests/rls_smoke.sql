@@ -46,9 +46,8 @@ INSERT INTO account (id, email, display_name) VALUES
   ('50000000-0000-0000-0000-000000000002', 'rls-friend@example.com',   'RLS Friend'),
   ('50000000-0000-0000-0000-000000000003', 'rls-stranger@example.com', 'RLS Stranger');
 
-INSERT INTO friendship (account_lo_id, account_hi_id, status, requested_by_id, responded_at)
-VALUES ('50000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002',
-        'accepted', '50000000-0000-0000-0000-000000000001', now());
+INSERT INTO friendship (account_lo_id, account_hi_id)
+VALUES ('50000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002');
 
 -- Owner shares only the first game (4).
 INSERT INTO game_share (account_id, game_id)

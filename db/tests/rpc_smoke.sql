@@ -68,10 +68,9 @@ INSERT INTO account (id, email, display_name) VALUES
   ('b0000000-0000-0000-0000-000000000002', 'rpc-sarah@example.com', 'Sarah'),
   ('b0000000-0000-0000-0000-000000000003', 'rpc-mike@example.com',  'Mike');
 
-INSERT INTO friendship (account_lo_id, account_hi_id, status, requested_by_id, responded_at)
+INSERT INTO friendship (account_lo_id, account_hi_id)
 VALUES (least('b0000000-0000-0000-0000-000000000001'::uuid, 'b0000000-0000-0000-0000-000000000002'::uuid),
-        greatest('b0000000-0000-0000-0000-000000000001'::uuid, 'b0000000-0000-0000-0000-000000000002'::uuid),
-        'accepted', 'b0000000-0000-0000-0000-000000000001', now());
+        greatest('b0000000-0000-0000-0000-000000000001'::uuid, 'b0000000-0000-0000-0000-000000000002'::uuid));
 
 INSERT INTO location (id, account_id, kind, name) VALUES
   ('c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'physical', 'Box A'),
@@ -147,7 +146,7 @@ $$, 'adding cards to someone else''s location');
 -- ---------------------------------------------------------------------------
 
 SELECT pg_temp.must_fail($$
-  SELECT app_create_loan(
+  SELECT app_offer_loan(
     '[{"edition_id":"a0000000-0000-0000-0000-000000000004","finish":"NONFOIL",
        "origin_location_id":"c0000000-0000-0000-0000-000000000001",
        "condition":"NM","qty":1}]'::jsonb,
@@ -155,43 +154,53 @@ SELECT pg_temp.must_fail($$
 $$, '(1) lending to a non-friend');
 
 -- ---------------------------------------------------------------------------
--- (b) A pending loan moves nothing
+-- (b, j) An unaccepted loan is a request, and has no loan row at all
 -- ---------------------------------------------------------------------------
 
 CREATE TEMP TABLE t AS
-SELECT app_create_loan(
+SELECT app_offer_loan(
   '[{"edition_id":"a0000000-0000-0000-0000-000000000004","finish":"NONFOIL",
      "origin_location_id":"c0000000-0000-0000-0000-000000000001",
      "condition":"NM","qty":2}]'::jsonb,
-  'b0000000-0000-0000-0000-000000000002') AS loan_id;
+  'b0000000-0000-0000-0000-000000000002') AS request_id;
 
 DO $$
-DECLARE v_loan uuid; n int;
+DECLARE v_req uuid; n int;
 BEGIN
-  SELECT loan_id INTO v_loan FROM t;
+  SELECT request_id INTO v_req FROM t;
 
-  ASSERT (SELECT status FROM loan WHERE id = v_loan) = 'pending', 'loan should be pending';
+  ASSERT (SELECT status FROM request WHERE id = v_req) = 'pending', 'request should be pending';
+
+  -- The strongest form of invariant (2): there is nothing that COULD move.
+  SELECT count(*) INTO n FROM loan;
+  ASSERT n = 0, format('(2,23) an unaccepted offer must create no loan row, found %s', n);
+
   ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM') = 2,
-    format('(2) pending loan must move nothing, Box A NONFOIL is %s',
-           pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM'));
+    '(2) an unaccepted offer must move no inventory';
 
-  SELECT count(*) INTO n FROM loan_line WHERE loan_id = v_loan;
-  ASSERT n = 2, format('(11,13) qty 2 must expand to 2 single-card lines, got %s', n);
-
-  RAISE NOTICE 'ok  (2) pending loan moves no inventory; (13) qty 2 -> 2 lines';
+  RAISE NOTICE 'ok  (2,23) offer is a request: no loan row, no inventory moved';
 END $$;
+
+-- A second identical offer is refused while the first is pending.
+SELECT pg_temp.must_fail($$
+  SELECT app_offer_loan(
+    '[{"edition_id":"a0000000-0000-0000-0000-000000000004","finish":"NONFOIL",
+       "origin_location_id":"c0000000-0000-0000-0000-000000000001",
+       "condition":"NM","qty":1}]'::jsonb,
+    'b0000000-0000-0000-0000-000000000002')
+$$, '(23) duplicate pending request of the same kind');
 
 -- Only the addressee may accept.
 SELECT pg_temp.must_fail($$
-  SELECT app_accept_loan((SELECT loan_id FROM t))
-$$, '(2) lender accepting their own loan');
+  SELECT app_accept_request((SELECT request_id FROM t))
+$$, '(23) proposer accepting their own request');
 
 -- ---------------------------------------------------------------------------
 -- (c) Accepting moves inventory into the holder bucket
 -- ---------------------------------------------------------------------------
 
 SELECT pg_temp.act_as('b0000000-0000-0000-0000-000000000002');
-SELECT app_accept_loan((SELECT loan_id FROM t));
+SELECT app_accept_request((SELECT request_id FROM t));
 
 -- Back to the owner before asserting. Inventory assertions run under RLS, so
 -- checking them as Sarah would read zeros for everything -- and pass for
@@ -199,11 +208,14 @@ SELECT app_accept_loan((SELECT loan_id FROM t));
 SELECT pg_temp.act_as('b0000000-0000-0000-0000-000000000001');
 
 DO $$
-DECLARE v_holder uuid;
+DECLARE v_holder uuid; n int;
 BEGIN
   SELECT id INTO v_holder FROM location
    WHERE account_id = 'b0000000-0000-0000-0000-000000000001'
      AND holder_account_id = 'b0000000-0000-0000-0000-000000000002';
+
+  SELECT count(*) INTO n FROM loan_line;
+  ASSERT n = 2, format('(13) qty 2 must expand to 2 single-card lines, got %s', n);
 
   ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM') = 0,
     'Box A NONFOIL bucket should be emptied and deleted';
@@ -214,7 +226,7 @@ BEGIN
              AND condition = 'NM' AND finish = 'NONFOIL') = 0,
     '(8) emptied bucket must be deleted, not zeroed';
 
-  RAISE NOTICE 'ok  (10) accept moved 2 into the holder bucket; emptied bucket deleted';
+  RAISE NOTICE 'ok  (10,13) accept created the loan, moved 2, split into 2 lines';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -239,17 +251,25 @@ $$, '(5) lender unfriending the borrower while cards are out');
 
 SELECT pg_temp.act_as('b0000000-0000-0000-0000-000000000002');
 CREATE TEMP TABLE tr AS
-SELECT app_request_transfer(
-  (SELECT id FROM loan_line WHERE loan_id = (SELECT loan_id FROM t) ORDER BY id LIMIT 1),
-  'b0000000-0000-0000-0000-000000000003') AS transfer_id;
+SELECT app_request_sub_loan(
+  (SELECT id FROM loan_line WHERE status = 'outstanding' ORDER BY id LIMIT 1),
+  'b0000000-0000-0000-0000-000000000003') AS request_id;
+
+-- One transfer in flight per card. This used to be a partial unique index;
+-- it now spans two tables, so app_request_sub_loan() carries it instead.
+SELECT pg_temp.must_fail($$
+  SELECT app_request_sub_loan(
+    (SELECT loan_line_id FROM request_sub_loan LIMIT 1),
+    'b0000000-0000-0000-0000-000000000003')
+$$, '(18) second pending transfer request for the same card');
 
 -- The borrower cannot approve their own request; only the owner can.
 SELECT pg_temp.must_fail($$
-  SELECT app_approve_transfer((SELECT transfer_id FROM tr))
+  SELECT app_accept_request((SELECT request_id FROM tr))
 $$, '(18) borrower approving their own transfer');
 
 SELECT pg_temp.act_as('b0000000-0000-0000-0000-000000000001');
-SELECT app_approve_transfer((SELECT transfer_id FROM tr));
+SELECT app_accept_request((SELECT request_id FROM tr));
 
 DO $$
 DECLARE v_sarah uuid; v_mike uuid;
@@ -263,7 +283,7 @@ BEGIN
 
   ASSERT pg_temp.qty_at(v_sarah, 'NM') = 1, 'Sarah should be down to 1';
   ASSERT pg_temp.qty_at(v_mike, 'NM') = 1, 'Mike should now hold 1';
-  ASSERT (SELECT count(*) FROM loan_transfer WHERE status = 'approved') = 1,
+  ASSERT (SELECT count(*) FROM loan_transfer) = 1,
     '(19) the transfer row must survive as custody history';
 
   RAISE NOTICE 'ok  (18,19,20) sub-loan to a non-friend, split 1/1, history kept';
@@ -319,7 +339,7 @@ SELECT app_force_close_line(
 DO $$
 DECLARE v_loan uuid;
 BEGIN
-  SELECT loan_id INTO v_loan FROM t;
+  SELECT id INTO v_loan FROM loan LIMIT 1;
   ASSERT (SELECT status FROM loan WHERE id = v_loan) = 'closed',
     '(11) a loan must close when its last line closes';
   ASSERT (SELECT count(*) FROM open_custody) = 0, 'no custody should remain open';

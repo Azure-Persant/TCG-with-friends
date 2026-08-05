@@ -54,6 +54,33 @@ Two habits worth keeping:
   filter here implies the privacy rule lives in the page, and eventually
   someone deletes it as redundant.
 
+## Deploying to Vercel
+
+The app lives in `web/`, not the repo root, and there is no root
+`package.json`. Vercel cannot autodetect that, so **Root Directory must be set
+to `web`** when importing the project — otherwise the build fails with no
+framework detected.
+
+Two environment variables, both from Supabase → Project Settings → Data API:
+
+| Name | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key |
+
+Then, in Supabase → Authentication → URL Configuration:
+
+- **Site URL**: your production Vercel URL
+- **Redirect URLs**: add `https://your-app.vercel.app/**` and, if you also run
+  locally, `http://localhost:3000/**`
+
+Sign-in links bounce without that allow-list entry. Preview deployments get
+their own subdomain each time, so add `https://*-yourteam.vercel.app/**` too if
+you want magic links to work on previews.
+
+`emailRedirectTo` is built from `window.location.origin` rather than a
+hardcoded URL, so localhost, previews and production all work off one build.
+
 ## What exists
 
 - `/login` — magic-link sign in

@@ -1,7 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+
+const LINK_FAILED =
+  'That sign-in link did not work. It may have expired or already been used — request a new one below.'
 
 /**
  * Magic-link sign in.
@@ -11,19 +15,41 @@ import { createClient } from '@/lib/supabase/client'
  * inbox is both simpler to build and harder to get wrong.
  */
 export default function LoginPage() {
+  // useSearchParams needs a Suspense boundary, because it forces this subtree
+  // to wait for request-time information that prerendering does not have.
+  return (
+    <Suspense fallback={<Shell />}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
+  const params = useSearchParams()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // /auth/confirm bounces here with ?error=link when a token will not verify.
+  // Derived during render rather than set in an effect: a value that is a pure
+  // function of the URL is not state, and treating it as state means rendering
+  // once with the wrong answer.
+  //
+  // A submit error supersedes it -- once you have tried again, the message
+  // about the old link is stale.
+  const error = submitError ?? (params.get('error') === 'link' ? LINK_FAILED : null)
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
-    setError(null)
+    setSubmitError(null)
 
     const supabase = createClient()
-    const next = new URLSearchParams(window.location.search).get('next') ?? '/collection'
+    const next = params.get('next') ?? '/collection'
 
+    // window.location.origin, not a hardcoded URL: this has to be right on
+    // localhost, on Vercel previews and in production without a rebuild.
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -32,17 +58,12 @@ export default function LoginPage() {
     })
 
     setBusy(false)
-    if (error) setError(error.message)
+    if (error) setSubmitError(error.message)
     else setSent(true)
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Card inventory</h1>
-      <p className="mt-2 text-sm text-neutral-500">
-        Keep track of what you own, what you have lent out, and who still has it.
-      </p>
-
+    <Shell>
       {sent ? (
         <div className="mt-8 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <p className="font-medium">Check your email</p>
@@ -73,9 +94,25 @@ export default function LoginPage() {
           >
             {busy ? 'Sending…' : 'Email me a sign-in link'}
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+          )}
         </form>
       )}
+    </Shell>
+  )
+}
+
+function Shell({ children }: { children?: React.ReactNode }) {
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Card inventory</h1>
+      <p className="mt-2 text-sm text-neutral-500">
+        Keep track of what you own, what you have lent out, and who still has it.
+      </p>
+      {children}
     </main>
   )
 }

@@ -402,19 +402,38 @@ coincides with a trade, the cards move through (24) like anything else. The
 `asking_price` column is a number the owner types and the app displays. It is
 never authoritative and nothing computes against it.
 
-### 30. Sign-in is a magic link, and there are no passwords
+### 30. Sign-in is an emailed CODE, and there are no passwords
 
-Supabase Auth, email one-time link, no password field anywhere.
+Supabase Auth, six-digit one-time code, no password field anywhere.
 
 A password would bring a reset flow, strength rules, a hashing decision to get
-right, and a credential worth stealing -- all to protect a list of which
-friend has your cards. A link in an inbox needs none of that and cannot be
-reused, phished off a sticky note, or shared between two people who "both use
-the same login".
+right, and a credential worth stealing -- all to protect a list of which friend
+has your cards. A one-time code needs none of that and cannot be reused,
+phished off a sticky note, or shared between two people who "both use the same
+login".
 
-**Cost:** signing in requires reaching your email, which is friction at a
-kitchen table mid-game. If that turns out to matter, the fix is a longer
-session, not a password.
+**A code, not a magic link, and the distinction is load-bearing.** This started
+as a magic link, which is the obvious choice and failed immediately in real
+use. Corporate mail filters -- Microsoft Safe Links, Proofpoint URL Defense and
+the rest -- pre-fetch every URL in an incoming message to check it is safe. A
+magic link is a single-use token, so the scanner spends it before the recipient
+ever clicks, and sign-in fails with an error that blames the user's link. It is
+not intermittent and it is not fixable in application code: any URL that
+authenticates by being visited is a URL a scanner can spend.
+
+A number typed by hand cannot be consumed by a machine following a link.
+
+**This constrains the email template, not just the app.** The Supabase template
+must send `{{ .Token }}` and must NOT contain `{{ .ConfirmationURL }}`. Both
+represent the same token, so leaving the link in means a scanner following it
+invalidates the code as well, and the failure looks identical to having changed
+nothing. Templates are project configuration rather than code, so nothing in
+this repository can enforce that -- it is written down in `web/README.md` and
+that is the only guard it has.
+
+**Cost:** signing in requires reaching your email and typing six digits, which
+is more friction than a link would have been, at a kitchen table mid-game. If
+that matters, the fix is a longer session, not a password.
 
 ### 31. `account.id` IS `auth.users.id`
 

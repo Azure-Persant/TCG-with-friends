@@ -3,8 +3,16 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * Where the magic link lands. Exchanges the one-time token for a session
- * cookie, then forwards to wherever the user was originally headed.
+ * Where a link-style email lands.
+ *
+ * Sign-in is code-based now (30), so nothing routine arrives here -- the email
+ * templates send a code, not a URL. This stays for the cases that are still
+ * links by nature: an email-change confirmation, or a template someone edits
+ * back to {{ .ConfirmationURL }} later.
+ *
+ * Worth knowing if you ever do re-enable links: a corporate mail scanner that
+ * pre-fetches URLs will hit this route before the human does and spend the
+ * token, and the human then sees "link did not work".
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)

@@ -217,6 +217,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
 | `db/auth_bridge.sql` | Provisions an account per auth user (31). |
+| `db/apply.mjs` | Applies every file in the one order that works. |
 | `web/` | Next.js app: login, collection, inbox. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |

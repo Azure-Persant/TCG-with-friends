@@ -12,18 +12,16 @@ npm run dev
 
 ## Setting up the database side
 
-Apply these to your Supabase project, in order, from the SQL editor:
+```bash
+cd ../db && npm install
+npm run apply -- --url "postgresql://postgres:PASSWORD@db.YOURREF.supabase.co:5432/postgres"
+```
 
-| Order | File | Why |
-|---|---|---|
-| 1 | `../db/schema.sql` | Tables, types, views |
-| 2 | `../db/auth_bridge.sql` | Creates an `account` row per `auth.users` row |
-| 3 | `../db/policies.sql` | Row Level Security |
-| 4 | `../db/functions.sql` | Every mutation |
+Connection string: Supabase dashboard → **Project Settings → Database →
+Connection string → URI**. Use the **direct** connection on port 5432, not the
+transaction pooler on 6543.
 
-Do **not** apply `../db/local/auth_shim.sql` to Supabase. It fakes `auth.uid()`
-and an `auth.users` table for local testing, and loading it in production would
-shadow the real ones.
+See `../db/README.md` for what it applies and why the order matters.
 
 In **Authentication → URL Configuration**, add `http://localhost:3000/**` to the
 redirect allow-list, or the magic link will bounce.

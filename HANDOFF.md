@@ -3,8 +3,16 @@
 Everything established so far, for whoever picks this up next — including a
 future me.
 
-**Status:** design settled, database built and tested, catalog ingest working.
-**No application code exists yet.** This branch is deliberately all foundation.
+**Status:** design settled, database built and tested, all mutations
+implemented as Postgres functions, catalog ingest working, and a Next.js app
+with working auth covering sign-in, your collection, and the request inbox.
+
+Loans, borrows, trades, friend requests and sub-loans are all implemented and
+tested. 68 assertions across five suites.
+
+Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
+**mobile-first responsive web**, **magic link + Google** sign-in, and
+**invariants enforced in Postgres RPC** rather than app code.
 
 ---
 
@@ -107,9 +115,10 @@ who had a card when it came back damaged is the entire point.
 
 ---
 
-## 4. Two bugs the tests caught
+## 4. Three bugs the tests caught
 
-Both are recorded because they'd be easy to reintroduce.
+All recorded because they'd be easy to reintroduce, and none of them are
+visible by reading any single file.
 
 ### The privacy rule nearly destroyed the feature it qualifies
 
@@ -126,6 +135,65 @@ The view now runs with its owner's rights and does its own friendship check in
 its `WHERE` clause. **That clause is the entire access control for the view.**
 Keep it in sync with the friendship and sharing rules.
 
+### RLS policies can chase each other into infinite recursion
+
+The policy on `loan` needed to ask "is the caller a borrower on any of its
+lines?", so it queried `loan_line`. The policy on `loan_line` needed to ask "is
+the caller the lender?", so it queried `loan`. Postgres aborts the whole query
+with `infinite recursion detected in policy for relation "loan"`.
+
+Caught by `db/tests/rpc_smoke.sql` the first time a test read a loan back.
+Nothing in the schema or the policies looks wrong in isolation — the cycle only
+exists between them.
+
+**The fix, and the rule:** any policy that needs to consult another RLS-guarded
+table must do it through a `SECURITY DEFINER` helper (`app_is_lender_of_loan`,
+`app_is_borrower_on_loan`, `app_is_holder_of_line`, `app_is_lender_of_line`).
+Those run with the definer's rights, so the inner query skips RLS and the cycle
+breaks. Do not inline those `EXISTS` clauses back into a policy.
+
+### The auth shim had never been tested against real auth
+
+Every policy and function was written against `auth.uid()`, but the local
+`auth_shim.sql` implemented that as a read of a bespoke `app.current_user_id`
+setting. Supabase reads the `sub` claim out of `request.jwt.claims`. So the
+project's entire privacy model had been proven against a function that did not
+resemble the one it would run against.
+
+The shim now implements the real formula, and all five suites drive it through
+forged JWT claims. Everything still passed — but that was a coin-flip, not a
+result, and it is the sort of gap that surfaces in production as "why is
+everything empty".
+
+**Still untested:** whether Supabase actually sets those claims the way this
+assumes. That needs a real project, and it is the first thing to check once
+one exists (see below).
+
+### One request table, or five copies of the same flow
+
+Friend requests, loan acceptances and sub-loan transfers were each built with
+their own table and their own accept/decline path. Adding trades and borrows
+would have made five — five inbox surfaces, five notification paths, five sets
+of expiry rules, all of which must behave identically to a user.
+
+They are now one `request` table with a `kind` (23). Only the approval
+lifecycle is shared; the payload and the effect of accepting stay per-kind, in
+tables that point back at the request.
+
+**The refactor paid for itself immediately.** Because a request now owns the
+pending state, `loan` no longer has one: an unaccepted loan has no row in
+`loan` at all. Invariant (b) — "a pending loan moves no inventory" — stopped
+being a rule anyone can break and became a fact about the schema. The same
+applies to `loan_transfer`, which is now purely the custody trail (19) rather
+than a workflow with a status column.
+
+**What it cost:** every existing test had to be rewritten, and one rule got
+weaker. "At most one transfer in flight per card" used to be a partial unique
+index; it now spans `request` and `request_sub_loan`, which no index can
+express, so `app_request_sub_loan()` enforces it instead. A rule enforced in a
+function is a rule that can be bypassed by a new code path — that one needs
+watching.
+
 ### Empty buckets must be deleted, not zeroed
 
 `qty > 0` is enforced, so decrementing a bucket to zero is rejected outright.
@@ -141,9 +209,16 @@ became explicit when the smoke test tripped over it on a final return.
 | `docs/design/friends-and-loans.md` | All 22 decisions with rationale. The source of truth. |
 | `db/schema.sql` | 16 tables, 2 views. Portable Postgres, no Supabase dependency. |
 | `db/policies.sql` | Row Level Security. **Required on Supabase.** |
+| `db/functions.sql` | Every mutation, as `SECURITY DEFINER` RPCs. |
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
 | `db/tests/schema_smoke.sql` | Full loan lifecycle + 21 constraint rejections. |
 | `db/tests/rls_smoke.sql` | Owner / friend / stranger visibility, as an unprivileged role. |
+| `db/tests/rpc_smoke.sql` | Full loan lifecycle through the RPCs, as an unprivileged role. |
+| `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
+| `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
+| `db/auth_bridge.sql` | Provisions an account per auth user (31). |
+| `db/apply.mjs` | Applies every file in the one order that works. |
+| `web/` | Next.js app: login, collection, inbox. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
@@ -157,8 +232,10 @@ createdb fci
 psql -d fci -v ON_ERROR_STOP=1 -f db/schema.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/local/auth_shim.sql   # local only
 psql -d fci -v ON_ERROR_STOP=1 -f db/policies.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/functions.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/tests/schema_smoke.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rls_smoke.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rpc_smoke.sql
 
 cd ingest && npm install && cp .env.example .env
 npm run catalog    # ~90 seconds
@@ -231,10 +308,24 @@ else about the card is the lender's.
 
 1. **Auth wiring** — Supabase auth, with `account.id` mirroring
    `auth.users.id`, which is what every policy in `db/policies.sql` assumes.
-2. **Inventory entry** — the first real test of the wide bucket key.
-3. **Loan flows** — request, accept, return, force-close, transfer approval.
-4. **Notifications** — loan requests, returns, transfer approvals. No design
-   exists yet.
+   Magic link plus Google.
+2. **Inventory entry** — the first real test of the wide bucket key. Calls
+   `app_add_cards` and `app_move_cards`.
+3. **Loan flows** — the RPCs already exist (`app_create_loan`,
+   `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
+   `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
+   so this is UI over a tested backend.
+4. **Notifications** — the largest remaining gap, and (23) has changed its shape
+   for the better: there is now exactly one table to watch and one place to
+   emit from, rather than five. Every flow assumes something tells the other
+   person; nothing does yet.
+
+**The app never touches money (29).** A sale listing is an intent marker with
+an optional asking price; people settle via PayPal, Zelle, Venmo or cash on
+their own. Do not add orders, payments or a sold state — that turns this into
+a marketplace, which owes users dispute handling, refunds, chargeback
+exposure and money-transmission compliance, none of which makes knowing where
+your cards are work any better.
 5. **Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
    since it's already keyed the way prices are quoted.
 

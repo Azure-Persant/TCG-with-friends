@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  database:
+    name: Database (schema, RLS, RPC)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: fci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGUSER: dev
+      PGPASSWORD: dev
+      PGDATABASE: fci
+      # Any failed statement fails the job. Without this psql reports the
+      # error and exits 0, so a broken schema would look like a green build.
+      PSQL: psql -v ON_ERROR_STOP=1 -q
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # auth_shim stands in for Supabase's auth.uid() and creates the
+      # unprivileged app_user role. It is local/CI only -- never loaded on
+      # Supabase, where the real auth schema exists.
+      - name: Apply schema
+        run: $PSQL -f db/schema.sql
+
+      - name: Apply local auth shim
+        run: $PSQL -f db/local/auth_shim.sql
+
+      - name: Apply RLS policies
+        run: $PSQL -f db/policies.sql
+
+      - name: Apply mutation functions
+        run: $PSQL -f db/functions.sql
+
+      - name: Schema + loan lifecycle tests
+        run: $PSQL -f db/tests/schema_smoke.sql
+
+      - name: Row Level Security tests
+        run: $PSQL -f db/tests/rls_smoke.sql
+
+      - name: Mutation RPC tests
+        run: $PSQL -f db/tests/rpc_smoke.sql
+
+      - name: Request, trade and listing tests
+        run: $PSQL -f db/tests/request_smoke.sql
+
+      - name: Auth bridge tests
+        run: $PSQL -f db/tests/auth_smoke.sql
+
+      # functions.sql is all CREATE OR REPLACE, so re-applying it to a live
+      # database must be safe -- that is how it will be deployed. (policies.sql
+      # is NOT idempotent: CREATE POLICY has no IF NOT EXISTS, so it is not
+      # re-run here.)
+      - name: Re-apply functions and re-test (idempotency)
+        run: |
+          $PSQL -f db/functions.sql
+          $PSQL -f db/tests/rpc_smoke.sql
+          $PSQL -f db/tests/request_smoke.sql
+          $PSQL -f db/tests/auth_smoke.sql
+
+  ingest:
+    name: Ingest worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ingest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ingest/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Placeholders. The build only needs these to exist -- nothing is
+      # contacted at build time, and the anon key is public anyway (it grants
+      # nothing without a session, because RLS does the work).
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run build
+
+      - run: npx eslint .

@@ -12,15 +12,7 @@
 BEGIN;
 SET client_min_messages = notice;
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-    CREATE ROLE app_user NOLOGIN;
-  END IF;
-END $$;
-
-GRANT USAGE ON SCHEMA public, auth TO app_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, auth TO app_user;
+-- app_user and its grants are created by db/local/auth_shim.sql.
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (as owner, RLS bypassed)
@@ -54,9 +46,8 @@ INSERT INTO account (id, email, display_name) VALUES
   ('50000000-0000-0000-0000-000000000002', 'rls-friend@example.com',   'RLS Friend'),
   ('50000000-0000-0000-0000-000000000003', 'rls-stranger@example.com', 'RLS Stranger');
 
-INSERT INTO friendship (account_lo_id, account_hi_id, status, requested_by_id, responded_at)
-VALUES ('50000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002',
-        'accepted', '50000000-0000-0000-0000-000000000001', now());
+INSERT INTO friendship (account_lo_id, account_hi_id)
+VALUES ('50000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002');
 
 -- Owner shares only the first game (4).
 INSERT INTO game_share (account_id, game_id)
@@ -82,7 +73,7 @@ INSERT INTO holding (account_id, edition_id, finish, location_id, condition, qty
 -- ---------------------------------------------------------------------------
 
 SET LOCAL ROLE app_user;
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000002';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000002');
 
 DO $$
 DECLARE n bigint; total bigint; onloan bigint;
@@ -119,7 +110,7 @@ END $$;
 -- As a STRANGER
 -- ---------------------------------------------------------------------------
 
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000003';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000003');
 
 DO $$
 DECLARE n bigint;
@@ -142,7 +133,7 @@ END $$;
 -- As the OWNER
 -- ---------------------------------------------------------------------------
 
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000001';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000001');
 
 DO $$
 DECLARE n bigint;

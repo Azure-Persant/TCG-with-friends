@@ -272,9 +272,175 @@ One backfill job pulls all ~6,400 images (~1.3 GB) into our storage. No runtime
 dependency on gatcg.com, no first-viewer latency, predictable cost. The job
 re-runs when new sets release.
 
+### 23. Every pending approval is one row in one table
+
+Friend requests, loan acceptances and sub-loan transfers were each built with
+their own table, their own states and their own accept/decline path. Adding
+trade requests and borrow requests would have made **five** parallel
+implementations of the same idea, each needing its own inbox surface, its own
+notification, and its own expiry rule -- five things that must look and behave
+identically to the user, kept in step by hand.
+
+So they collapse into a single `request` table with a `kind`, a proposer, a
+recipient, and one lifecycle: `pending -> accepted | declined | cancelled |
+superseded`. One inbox, one notification path, one set of semantics.
+
+**Cost, stated honestly:** this refactors three flows that already work and are
+already tested, and it forces a shape general enough to fit all five. That is
+worth paying now and would not be worth paying after the UI exists.
+
+**What stays per-kind:** the *payload* (which cards, to whom, on what terms)
+and the *effect* of accepting. Those live in kind-specific tables that point
+back at the request. Only the approval lifecycle is shared -- the thing that
+was genuinely duplicated.
+
+### 24. A trade settles in two phases, like a return
+
+Accepting a trade does not move any cards. Each side then confirms what they
+physically received, and each half settles independently.
+
+This mirrors (6), and for the same reason: a trade by mail has one side
+shipping days before the other, and an app that swaps both inventories the
+moment someone taps *accept* is simply lying for as long as the cards are in
+transit. Two-phase also gives each receiver the natural moment to set the
+condition of what arrived, which is exactly (13) applied to the other
+direction.
+
+A trade is the **first thing in the app that moves cards between two
+accounts.** Loans never do -- a loaned card stays in the lender's inventory and
+merely changes location (2). A completed trade transfers ownership outright, so
+it is the first operation that writes to a second account's holdings.
+
+**The stall this admits:** a half-settled trade, where one side confirmed and
+the other never did. That is the trade equivalent of the deadlock (5)
+describes, and it needs the same escape hatch -- the confirming side can
+force-close their half, recording that the cards never arrived.
+
+### 25. A counter-offer is a new proposal, not an edit
+
+Any change to a trade's terms declines the original and creates a fresh
+request, linked to the one it replaces (`superseded`). Acceptance therefore
+always applies to exactly the terms that were on screen.
+
+The alternative -- editing in place with acceptance reset -- reads better for
+real haggling, but it introduces a race the accepted-terms model does not have:
+someone taps accept on the version they were reading while the other side is
+mid-revision. Guaranteeing that never resolves wrongly is real work, and this
+is a small friend group who will mostly negotiate in chat anyway.
+
+**Cost:** a long back-and-forth leaves a chain of dead proposals. The chain is
+the negotiation history, which is not obviously a bad thing.
+
+### 26. Anything a friend can see, a friend may ask for
+
+No permission layer on requesting. If a card is visible under the game-sharing
+rule (4), a friend can propose a trade or a borrow for it. Declining is one
+tap, and these are people you have mutually accepted as friends.
+
+Per-card `lendable` / `tradable` flags were the obvious alternative and are
+rejected as a *gate*: flags nobody remembers to set are worse than no flags,
+because they create a false sense that the unmarked cards are protected.
+
+### 27. Listings are a signal, not a gate
+
+Cards can be listed **for trade** or **for sale**. This does not restrict who
+may ask -- (26) still holds. What it does is annotate the request: if someone
+asks for a card that is listed for neither, the owner's notification carries a
+warning that this card was never offered.
+
+This is the useful half of per-card flags without the maintenance trap. An
+unset flag does not block anything; it only means the owner gets a heads-up
+that someone is asking for something off-menu. The asker is never told "no" by
+the system, and the owner is never surprised into giving away a grail because
+the request looked routine.
+
+**Scope of "for sale":** a listing is an *intent* marker with an optional
+asking price. There is no in-app payment, no order and no marked-sold state.
+See (29).
+
+**Listings are keyed on `(account, edition, finish)`, not on a holding.**
+Holdings are split by location and condition, and a listing must not be tied to
+which box a card is sitting in -- moving a card between boxes would otherwise
+silently drop or duplicate its listing. Location is also private (14), so
+hanging public-ish listing data off a location-keyed row invites a leak.
+
+### 28. A borrow request is a loan proposed from the other end
+
+Borrowing needs no new custody model. It is `app_create_loan` with the roles
+reversed: the borrower proposes, the owner approves, and the cards move on
+**approval** rather than on acceptance. Everything downstream -- holder
+locations, per-card returns, force-close, sub-loans -- is identical, because by
+the time cards move, it is an ordinary loan.
+
+This is why (23) matters more than it first appears. Once the approval
+lifecycle is shared, a borrow request is a request row plus a call to a
+function that already exists and is already tested.
+
+### 29. The app never touches money
+
+A sale listing says "I would sell this, and here is roughly what I want for
+it." That is the entire feature. Settlement happens between the two people
+however they already settle things -- PayPal, Zelle, Venmo, cash across a
+table. The app does not process a payment, hold funds, record an order, or
+track a sold state.
+
+**Why this is the right line and not just the easy one.** Taking payments
+would make this a marketplace, and a marketplace owes its users things a
+friends-and-loans app does not: dispute handling, refunds, chargeback
+exposure, seller identity verification, tax reporting, and money-transmission
+compliance that varies by jurisdiction. Every one of those is a permanent
+operational burden, and none of them makes the core feature -- knowing where
+your cards are -- work any better.
+
+It also fits who this is for. These are people who already know each other and
+already have a way to pay each other. Inserting an app into that is friction,
+not a service.
+
+**What follows from it:** the seller marks the listing sold by adjusting their
+own inventory, exactly as they would after any other change. If a sale
+coincides with a trade, the cards move through (24) like anything else. The
+`asking_price` column is a number the owner types and the app displays. It is
+never authoritative and nothing computes against it.
+
+### 30. Sign-in is a magic link, and there are no passwords
+
+Supabase Auth, email one-time link, no password field anywhere.
+
+A password would bring a reset flow, strength rules, a hashing decision to get
+right, and a credential worth stealing -- all to protect a list of which
+friend has your cards. A link in an inbox needs none of that and cannot be
+reused, phished off a sticky note, or shared between two people who "both use
+the same login".
+
+**Cost:** signing in requires reaching your email, which is friction at a
+kitchen table mid-game. If that turns out to matter, the fix is a longer
+session, not a password.
+
+### 31. `account.id` IS `auth.users.id`
+
+Every policy in this project compares something to `auth.uid()`, which returns
+the id of a row in Supabase's `auth.users`. Every one of those comparisons is
+against an `account_id`. So the two ids must be the same value, and a trigger
+in `db/auth_bridge.sql` provisions the account row on signup to guarantee it.
+
+**Why this gets its own file and its own test.** If the ids ever diverge,
+nothing errors. `auth.uid()` simply matches no account, and every policy
+denies everything: empty collection, empty friend list, empty inbox, no
+message. It is the one failure in this design that looks exactly like "the app
+has no data in it", and it would be debugged from the wrong end for hours.
+
+**Deleting an auth user does not cascade.** There is deliberately no foreign
+key from `account.id` to `auth.users.id`. A cascade would tear through
+friendship, location, holding and loan -- and (5) exists precisely to stop a
+relationship dissolving while cards are still outstanding. Cascading drives
+straight past that check: your friend deletes their login and the record of
+who has your cards goes with it. An orphaned account row is the intended
+outcome, because the person still owed cards needs the history more than the
+database needs tidiness.
+
 ## Open questions
 
-None blocking. The image-mirroring question was resolved by precedent —
+None. The image-mirroring question was resolved by precedent —
 shoutyourdeck.com, fractalofin.site and silvie.gg all mirror the same catalog.
 The concern that actually mattered was never legal but architectural: not
 pulling from gatcg.com on every page view, which (17) and (22) settle.
@@ -335,7 +501,12 @@ only while a card is away and closes when it comes home; a holding is an
 
 ## Still to design
 
-- Authentication and session handling
 - The GATCG ingest worker itself (paginated crawl + image backfill)
-- Notifications for loan requests, returns, and transfer approvals
-- Pricing, if it ever comes — `card_edition_finish` is the natural hook
+- **Notifications.** Now the largest gap. Every flow in this document assumes
+  something tells the other person, and (23) makes it worse in a useful way:
+  there is now exactly one place a notification must be emitted from, so it is
+  one job rather than five — but nothing is emitted yet.
+- Market pricing, if it ever comes — `card_edition_finish` is the natural hook.
+  Note this is a *display* feature (what is this worth?), unrelated to (29):
+  showing a market price is not the same as processing a payment
+- Force-closing a half-settled trade (24) — same shape as (15), not yet specced

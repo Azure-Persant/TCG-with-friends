@@ -21,3 +21,16 @@ STABLE
 AS $$
   SELECT nullif(current_setting('app.current_user_id', true), '')::uuid;
 $$;
+
+-- An unprivileged role standing in for Supabase's `authenticated`. RLS does
+-- not apply to superusers or table owners, so the tests must run as this role
+-- for their assertions to mean anything.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+    CREATE ROLE app_user NOLOGIN;
+  END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA public, auth TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO app_user;

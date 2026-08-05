@@ -3,8 +3,13 @@
 Everything established so far, for whoever picks this up next — including a
 future me.
 
-**Status:** design settled, database built and tested, catalog ingest working.
-**No application code exists yet.** This branch is deliberately all foundation.
+**Status:** design settled, database built and tested, all mutations
+implemented as Postgres functions, catalog ingest working.
+**No UI code exists yet.**
+
+Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
+**mobile-first responsive web**, **magic link + Google** sign-in, and
+**invariants enforced in Postgres RPC** rather than app code.
 
 ---
 
@@ -107,9 +112,10 @@ who had a card when it came back damaged is the entire point.
 
 ---
 
-## 4. Two bugs the tests caught
+## 4. Three bugs the tests caught
 
-Both are recorded because they'd be easy to reintroduce.
+All recorded because they'd be easy to reintroduce, and none of them are
+visible by reading any single file.
 
 ### The privacy rule nearly destroyed the feature it qualifies
 
@@ -126,6 +132,23 @@ The view now runs with its owner's rights and does its own friendship check in
 its `WHERE` clause. **That clause is the entire access control for the view.**
 Keep it in sync with the friendship and sharing rules.
 
+### RLS policies can chase each other into infinite recursion
+
+The policy on `loan` needed to ask "is the caller a borrower on any of its
+lines?", so it queried `loan_line`. The policy on `loan_line` needed to ask "is
+the caller the lender?", so it queried `loan`. Postgres aborts the whole query
+with `infinite recursion detected in policy for relation "loan"`.
+
+Caught by `db/tests/rpc_smoke.sql` the first time a test read a loan back.
+Nothing in the schema or the policies looks wrong in isolation — the cycle only
+exists between them.
+
+**The fix, and the rule:** any policy that needs to consult another RLS-guarded
+table must do it through a `SECURITY DEFINER` helper (`app_is_lender_of_loan`,
+`app_is_borrower_on_loan`, `app_is_holder_of_line`, `app_is_lender_of_line`).
+Those run with the definer's rights, so the inner query skips RLS and the cycle
+breaks. Do not inline those `EXISTS` clauses back into a policy.
+
 ### Empty buckets must be deleted, not zeroed
 
 `qty > 0` is enforced, so decrementing a bucket to zero is rejected outright.
@@ -141,9 +164,11 @@ became explicit when the smoke test tripped over it on a final return.
 | `docs/design/friends-and-loans.md` | All 22 decisions with rationale. The source of truth. |
 | `db/schema.sql` | 16 tables, 2 views. Portable Postgres, no Supabase dependency. |
 | `db/policies.sql` | Row Level Security. **Required on Supabase.** |
+| `db/functions.sql` | Every mutation, as `SECURITY DEFINER` RPCs. |
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
 | `db/tests/schema_smoke.sql` | Full loan lifecycle + 21 constraint rejections. |
 | `db/tests/rls_smoke.sql` | Owner / friend / stranger visibility, as an unprivileged role. |
+| `db/tests/rpc_smoke.sql` | Full lifecycle driven through the RPCs, as an unprivileged role. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
@@ -157,8 +182,10 @@ createdb fci
 psql -d fci -v ON_ERROR_STOP=1 -f db/schema.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/local/auth_shim.sql   # local only
 psql -d fci -v ON_ERROR_STOP=1 -f db/policies.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/functions.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/tests/schema_smoke.sql
 psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rls_smoke.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rpc_smoke.sql
 
 cd ingest && npm install && cp .env.example .env
 npm run catalog    # ~90 seconds
@@ -231,10 +258,16 @@ else about the card is the lender's.
 
 1. **Auth wiring** — Supabase auth, with `account.id` mirroring
    `auth.users.id`, which is what every policy in `db/policies.sql` assumes.
-2. **Inventory entry** — the first real test of the wide bucket key.
-3. **Loan flows** — request, accept, return, force-close, transfer approval.
-4. **Notifications** — loan requests, returns, transfer approvals. No design
-   exists yet.
+   Magic link plus Google.
+2. **Inventory entry** — the first real test of the wide bucket key. Calls
+   `app_add_cards` and `app_move_cards`.
+3. **Loan flows** — the RPCs already exist (`app_create_loan`,
+   `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
+   `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
+   so this is UI over a tested backend.
+4. **Notifications** — loan requests, returns, transfer approvals. **No design
+   exists yet**, and every flow above assumes something will tell the other
+   person. This is the next thing to grill.
 5. **Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
    since it's already keyed the way prices are quoted.
 

@@ -12,15 +12,7 @@
 BEGIN;
 SET client_min_messages = notice;
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-    CREATE ROLE app_user NOLOGIN;
-  END IF;
-END $$;
-
-GRANT USAGE ON SCHEMA public, auth TO app_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, auth TO app_user;
+-- app_user and its grants are created by db/local/auth_shim.sql.
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (as owner, RLS bypassed)

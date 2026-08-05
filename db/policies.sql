@@ -119,9 +119,9 @@ CREATE POLICY friendship_request ON friendship
   FOR INSERT WITH CHECK (
     requested_by_id = auth.uid() AND auth.uid() IN (account_lo_id, account_hi_id));
 
--- Accepting or declining. The unfriend block (5) is enforced in application
--- code against the open_custody view, not here -- a DELETE policy cannot
--- express "unless the lender force-closes first".
+-- Accepting or declining a request. There is deliberately NO delete policy:
+-- unfriending goes through app_unfriend(), which refuses while cards are
+-- still outstanding in either direction (5).
 CREATE POLICY friendship_respond ON friendship
   FOR UPDATE USING (auth.uid() IN (account_lo_id, account_hi_id));
 
@@ -138,11 +138,21 @@ ALTER TABLE holding  ENABLE ROW LEVEL SECURITY;
 -- Locations are private, full stop -- including holder locations, which is
 -- what stops a friend from seeing WHO has your card (14). No friend-visible
 -- policy exists here on purpose.
-CREATE POLICY location_own ON location
-  FOR ALL USING (account_id = auth.uid()) WITH CHECK (account_id = auth.uid());
+-- Users manage their own PHYSICAL locations directly -- naming a box is
+-- harmless. Holder locations are created only by the loan functions, so a
+-- holding and its loan record can never disagree about who has a card.
+CREATE POLICY location_own_read ON location
+  FOR SELECT USING (account_id = auth.uid());
 
+CREATE POLICY location_own_write ON location
+  FOR ALL USING (account_id = auth.uid() AND kind = 'physical')
+  WITH CHECK (account_id = auth.uid() AND kind = 'physical');
+
+-- SELECT only. Every quantity change goes through db/functions.sql, which is
+-- what makes the invariants enforceable rather than advisory: on Supabase the
+-- client can always reach PostgREST directly.
 CREATE POLICY holding_own ON holding
-  FOR ALL USING (account_id = auth.uid()) WITH CHECK (account_id = auth.uid());
+  FOR SELECT USING (account_id = auth.uid());
 
 -- A friend may read holdings only for a shared game (4), or for a card they
 -- are currently holding. They still cannot read `location`, so they can count
@@ -165,6 +175,14 @@ ALTER TABLE loan_line           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loan_line_placement ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loan_transfer       ENABLE ROW LEVEL SECURITY;
 
+-- Cross-table policy checks MUST go through SECURITY DEFINER helpers.
+--
+-- A policy on `loan` that inline-queries `loan_line` triggers loan_line's own
+-- policy, which inline-queries `loan`, and Postgres aborts with "infinite
+-- recursion detected in policy for relation loan". These helpers run with the
+-- definer's rights, so the inner query bypasses RLS and the cycle is broken.
+-- Do not inline these EXISTS clauses back into the policies.
+
 -- Is the current user the borrower on this loan line?
 CREATE OR REPLACE FUNCTION app_is_holder_of_line(line uuid)
 RETURNS boolean
@@ -180,49 +198,74 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION app_is_lender_of_loan(p_loan uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM loan WHERE id = p_loan AND lender_account_id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION app_is_lender_of_line(p_line uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM loan_line ll JOIN loan ln ON ln.id = ll.loan_id
+     WHERE ll.id = p_line AND ln.lender_account_id = auth.uid()
+  );
+$$;
+
+-- Addressee of the original hand-off, or current holder of any line on it (2).
+CREATE OR REPLACE FUNCTION app_is_borrower_on_loan(p_loan uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM loan ln JOIN location loc ON loc.id = ln.initial_holder_location_id
+     WHERE ln.id = p_loan AND loc.holder_account_id = auth.uid()
+  ) OR EXISTS (
+    SELECT 1 FROM loan_line ll JOIN location loc ON loc.id = ll.holder_location_id
+     WHERE ll.loan_id = p_loan AND loc.holder_account_id = auth.uid()
+  );
+$$;
+
+-- Loans are SELECT-only here; every mutation goes through db/functions.sql.
 CREATE POLICY loan_lender ON loan
-  FOR ALL USING (lender_account_id = auth.uid()) WITH CHECK (lender_account_id = auth.uid());
+  FOR SELECT USING (lender_account_id = auth.uid());
 
 -- The borrower sees the loan they are on, so they can accept it (2).
 CREATE POLICY loan_borrower_read ON loan
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM location loc
-       WHERE loc.id = loan.initial_holder_location_id
-         AND loc.holder_account_id = auth.uid())
-    OR EXISTS (
-      SELECT 1 FROM loan_line ll
-       WHERE ll.loan_id = loan.id AND app_is_holder_of_line(ll.id))
-  );
+  FOR SELECT USING (app_is_borrower_on_loan(id));
 
 CREATE POLICY loan_line_lender ON loan_line
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM loan ln WHERE ln.id = loan_line.loan_id
-             AND ln.lender_account_id = auth.uid()))
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM loan ln WHERE ln.id = loan_line.loan_id
-             AND ln.lender_account_id = auth.uid()));
+  FOR SELECT USING (app_is_lender_of_loan(loan_id));
 
--- The borrower reads the lines they hold, and may mark them returned (6).
--- Everything else about the card stays the lender's data (7).
+-- The borrower reads the lines they hold; marking one returned goes through
+-- app_mark_returned() (6). Everything else about the card stays the lender's
+-- data (7), which a direct UPDATE policy could not express.
 CREATE POLICY loan_line_holder_read ON loan_line
   FOR SELECT USING (app_is_holder_of_line(id));
 
-CREATE POLICY loan_line_holder_return ON loan_line
-  FOR UPDATE USING (app_is_holder_of_line(id)) WITH CHECK (app_is_holder_of_line(id));
-
--- Placement is the borrower's own data (7).
+-- Placement is the borrower's own data (7), so it stays directly writable.
 CREATE POLICY placement_own ON loan_line_placement
   FOR ALL USING (account_id = auth.uid()) WITH CHECK (account_id = auth.uid());
 
--- Both the current holder (who proposes) and the owner (who approves) need
--- access to a transfer (18).
+-- Both the current holder (who proposes) and the owner (who approves) need to
+-- see a transfer (18). Approval itself goes through app_approve_transfer().
 CREATE POLICY transfer_visible ON loan_transfer
-  FOR ALL USING (
-    app_is_holder_of_line(loan_line_id)
-    OR EXISTS (
-      SELECT 1 FROM loan_line ll JOIN loan ln ON ln.id = ll.loan_id
-       WHERE ll.id = loan_transfer.loan_line_id AND ln.lender_account_id = auth.uid())
+  FOR SELECT USING (
+    app_is_holder_of_line(loan_line_id) OR app_is_lender_of_line(loan_line_id)
   );
 
 -- ---------------------------------------------------------------------------

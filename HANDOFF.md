@@ -299,14 +299,12 @@ else about the card is the lender's.
    emit from, rather than five. Every flow assumes something tells the other
    person; nothing does yet.
 
-**Before building the listing UI, settle one thing:** whether "for sale" ever
-involves money in the app. Everything is currently built on *no* — a listing
-is an intent marker with an optional asking price, and the transaction happens
-between two people who know each other. That is the strict subset, so nothing
-is wasted if the answer changes, but a real sale flow (price, sold state,
-copies leaving inventory, possibly payment) is a materially larger feature
-that needs its own decisions. It is recorded as the one open question in the
-design doc.
+**The app never touches money (29).** A sale listing is an intent marker with
+an optional asking price; people settle via PayPal, Zelle, Venmo or cash on
+their own. Do not add orders, payments or a sold state — that turns this into
+a marketplace, which owes users dispute handling, refunds, chargeback
+exposure and money-transmission compliance, none of which makes knowing where
+your cards are work any better.
 5. **Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
    since it's already keyed the way prices are quoted.
 

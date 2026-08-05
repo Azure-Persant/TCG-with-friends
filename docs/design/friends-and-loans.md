@@ -355,9 +355,8 @@ the system, and the owner is never surprised into giving away a grail because
 the request looked routine.
 
 **Scope of "for sale":** a listing is an *intent* marker with an optional
-asking price. There is no in-app payment, no order, no marked-sold state, and
-no money handling of any kind -- the transaction happens between two people who
-know each other. See the open question below.
+asking price. There is no in-app payment, no order and no marked-sold state.
+See (29).
 
 **Listings are keyed on `(account, edition, finish)`, not on a holding.**
 Holdings are split by location and condition, and a listing must not be tied to
@@ -377,22 +376,35 @@ This is why (23) matters more than it first appears. Once the approval
 lifecycle is shared, a borrow request is a request row plus a call to a
 function that already exists and is already tested.
 
+### 29. The app never touches money
+
+A sale listing says "I would sell this, and here is roughly what I want for
+it." That is the entire feature. Settlement happens between the two people
+however they already settle things -- PayPal, Zelle, Venmo, cash across a
+table. The app does not process a payment, hold funds, record an order, or
+track a sold state.
+
+**Why this is the right line and not just the easy one.** Taking payments
+would make this a marketplace, and a marketplace owes its users things a
+friends-and-loans app does not: dispute handling, refunds, chargeback
+exposure, seller identity verification, tax reporting, and money-transmission
+compliance that varies by jurisdiction. Every one of those is a permanent
+operational burden, and none of them makes the core feature -- knowing where
+your cards are -- work any better.
+
+It also fits who this is for. These are people who already know each other and
+already have a way to pay each other. Inserting an app into that is friction,
+not a service.
+
+**What follows from it:** the seller marks the listing sold by adjusting their
+own inventory, exactly as they would after any other change. If a sale
+coincides with a trade, the cards move through (24) like anything else. The
+`asking_price` column is a number the owner types and the app displays. It is
+never authoritative and nothing computes against it.
+
 ## Open questions
 
-### Does "for sale" ever involve money in the app?
-
-(27) assumes **no**: a sale listing is an intent marker with an optional asking
-price, and the actual transaction happens between two people who know each
-other. Everything is built on that assumption because it is the strict subset
--- the listing and the warning are needed either way.
-
-If sales should instead be first-class -- a price, a sold state, the copies
-leaving the seller's inventory, possibly payment -- that is a materially larger
-feature and needs its own decisions. It also collides with pricing, already
-noted below as unstarted. **Worth answering before the listing UI is built,
-not after.**
-
-None otherwise blocking. The image-mirroring question was resolved by precedent —
+None. The image-mirroring question was resolved by precedent —
 shoutyourdeck.com, fractalofin.site and silvie.gg all mirror the same catalog.
 The concern that actually mattered was never legal but architectural: not
 pulling from gatcg.com on every page view, which (17) and (22) settle.
@@ -459,6 +471,7 @@ only while a card is away and closes when it comes home; a holding is an
   something tells the other person, and (23) makes it worse in a useful way:
   there is now exactly one place a notification must be emitted from, so it is
   one job rather than five — but nothing is emitted yet.
-- Pricing, if it ever comes — `card_edition_finish` is the natural hook, and
-  (27)'s asking price is the first thing that will want it
+- Market pricing, if it ever comes — `card_edition_finish` is the natural hook.
+  Note this is a *display* feature (what is this worth?), unrelated to (29):
+  showing a market price is not the same as processing a payment
 - Force-closing a half-settled trade (24) — same shape as (15), not yet specced

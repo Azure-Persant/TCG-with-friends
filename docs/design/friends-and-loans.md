@@ -279,8 +279,36 @@ re-runs when new sets release.
    this is about whether redistribution is permitted, and is worth a direct ask
    to the maintainers.
 
-## Next step
+## Implementation
 
-The model is settled enough to draft schema: accounts, friendships, locations
-(with kind), catalog tables (card / edition / set), holdings, loans, and
-per-card loan lines.
+- **`db/schema.sql`** — PostgreSQL schema implementing every decision above.
+  Comments cite decision numbers.
+- **`db/tests/schema_smoke.sql`** — walks a full loan lifecycle (loan → accept
+  → sub-loan transfer → return with condition downgrade → force-close) and
+  asserts that the constraints reject the things they are supposed to reject.
+  Runs in a transaction and rolls back.
+
+```
+createdb fci
+psql -d fci -v ON_ERROR_STOP=1 -f db/schema.sql
+psql -d fci -v ON_ERROR_STOP=1 -f db/tests/schema_smoke.sql
+```
+
+### One rule the schema discovered
+
+`loan_line` holds **exactly one physical card** — no quantity column. That
+falls directly out of (13): if the lender sets condition at receipt, and two
+copies lent together can come back in different conditions, then a line
+carrying qty > 1 would need a condition breakdown inside itself. A 60-card deck
+is 60 lines.
+
+This does not contradict (8). A loan line is a *custody* record that exists
+only while a card is away and closes when it comes home; a holding is an
+*inventory* record. Only the latter is a bucket.
+
+## Still to design
+
+- Authentication and session handling
+- The GATCG ingest worker itself (paginated crawl + image backfill)
+- Notifications for loan requests, returns, and transfer approvals
+- Pricing, if it ever comes — `card_edition_finish` is the natural hook

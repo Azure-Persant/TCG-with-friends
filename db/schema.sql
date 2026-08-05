@@ -1,0 +1,476 @@
+-- friends-card-inventory — PostgreSQL schema (draft)
+--
+-- Implements docs/design/friends-and-loans.md. Parenthesised numbers in
+-- comments — e.g. (14) — refer to numbered decisions in that document.
+--
+-- Requires PostgreSQL 13+ (uses gen_random_uuid, num_nonnulls, FILTER).
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pg_trgm;   -- fuzzy card-name search
+CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive email
+
+-- ---------------------------------------------------------------------------
+-- Enums
+-- ---------------------------------------------------------------------------
+
+-- Physical grading scale. Part of the holding bucket key (8).
+CREATE TYPE card_condition AS ENUM ('MINT', 'NM', 'LP', 'MP', 'HP', 'DMG');
+
+-- Verified against api.gatcg.com: circulationTemplates.kind is only ever
+-- FOIL or NONFOIL, mapping 1:1 to the boolean `foil` flag (21).
+CREATE TYPE card_finish AS ENUM ('NONFOIL', 'FOIL');
+
+-- A location is either somewhere you keep cards, or somebody who has them.
+-- "On loan" is NOT a value here — it is derived from kind = 'holder'.
+CREATE TYPE location_kind AS ENUM ('physical', 'holder');
+
+CREATE TYPE friendship_status AS ENUM ('pending', 'accepted');
+
+CREATE TYPE loan_status AS ENUM ('pending', 'active', 'declined', 'cancelled', 'closed');
+
+CREATE TYPE loan_line_status AS ENUM ('outstanding', 'in_transit', 'returned', 'written_off');
+
+CREATE TYPE loan_close_reason AS ENUM (
+  'returned_confirmed',        -- normal two-step return (6)
+  'force_closed_returned',     -- lender's escape hatch, card is back (5, 15)
+  'force_closed_written_off'   -- lender's escape hatch, card is gone (5, 15)
+);
+
+CREATE TYPE transfer_status AS ENUM ('pending', 'approved', 'rejected', 'cancelled');
+
+CREATE TYPE sync_status AS ENUM ('running', 'succeeded', 'failed');
+
+-- ===========================================================================
+-- CATALOG (12, 16)
+--
+-- Global and shared. Users never write here; they reference it. Ingested per
+-- game from an upstream source — Grand Archive via api.gatcg.com first.
+-- ===========================================================================
+
+CREATE TABLE game (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug        text NOT NULL UNIQUE,          -- 'grand-archive'
+  name        text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE card_set (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id       uuid NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  external_id   text NOT NULL,               -- GATCG set.id
+  prefix        text NOT NULL,               -- 'HVN'
+  name          text NOT NULL,               -- 'Abyssal Heaven'
+  language      text NOT NULL DEFAULT 'EN',
+  release_date  date,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (game_id, external_id)
+);
+
+-- The abstract card: rules text, name, stats. Printing-independent.
+CREATE TABLE card (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id        uuid NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  external_uuid  text NOT NULL,              -- GATCG card.uuid
+  slug           text NOT NULL,
+  name           text NOT NULL,
+  -- Game-specific fields live here rather than as columns, so a second game
+  -- with a different stat line needs no migration. For Grand Archive:
+  -- element, elements, classes, types, subtypes, cost_memory, cost_reserve,
+  -- level, power, life, durability, speed, effect_raw, effect_html, legality.
+  attributes     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (game_id, external_uuid),
+  UNIQUE (game_id, slug)
+);
+
+CREATE INDEX card_name_trgm_idx ON card USING gin (lower(name) gin_trgm_ops);
+CREATE INDEX card_attributes_idx ON card USING gin (attributes);
+
+-- A specific printing. GATCG averages ~2.86 of these per card (16, 21).
+CREATE TABLE card_edition (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id            uuid NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+  set_id             uuid NOT NULL REFERENCES card_set(id) ON DELETE RESTRICT,
+  external_uuid      text NOT NULL UNIQUE,   -- GATCG edition.uuid, also the image key
+  slug               text NOT NULL,          -- 'arcane-blast-hvn'
+  collector_number   text NOT NULL,          -- text: leading zeros and suffixes exist
+  rarity             smallint,
+  illustrator        text,
+  orientation        text,
+  configuration      text,
+  source_image_path  text,                   -- '/cards/images/{uuid}.jpg' upstream
+  attributes         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (card_id, slug)
+);
+
+CREATE INDEX card_edition_card_idx ON card_edition (card_id);
+CREATE INDEX card_edition_set_idx  ON card_edition (set_id);
+
+-- Which finishes actually exist for a printing, from circulationTemplates.
+--
+-- INGEST RULE: ~13% of editions (72 of 538 sampled) return no circulation
+-- templates at all. The ingest MUST seed a NONFOIL row for those, otherwise
+-- the composite FK below makes their cards impossible to add to an inventory.
+CREATE TABLE card_edition_finish (
+  edition_id           uuid NOT NULL REFERENCES card_edition(id) ON DELETE CASCADE,
+  finish               card_finish NOT NULL,
+  external_uuid        text,                 -- circulationTemplate.uuid
+  label                text,                 -- 'HVN Common Foil'
+  population           bigint,
+  population_operator  text,                 -- '≈'
+  is_seeded            boolean NOT NULL DEFAULT false,  -- true = inferred, not upstream
+  PRIMARY KEY (edition_id, finish)
+);
+
+-- Self-hosted images (17, 22). Pre-fetched in full at ingest: ~6,400 editions,
+-- ~1.3 GB. The app never links to gatcg.com at runtime.
+CREATE TABLE card_image (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  edition_id       uuid NOT NULL REFERENCES card_edition(id) ON DELETE CASCADE,
+  variant          text NOT NULL,            -- 'original' | 'thumb' | ...
+  storage_key      text NOT NULL UNIQUE,
+  content_type     text NOT NULL,
+  byte_size        bigint NOT NULL,
+  width            integer,
+  height           integer,
+  source_url       text NOT NULL,
+  checksum_sha256  text,
+  fetched_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (edition_id, variant)
+);
+
+-- Ingest observability. Paginate on has_more, NEVER total_pages: the upstream
+-- reports total_cards incorrectly at small page sizes, and silently caps
+-- page_size at 50 (16).
+CREATE TABLE catalog_sync_run (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id           uuid NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  status            sync_status NOT NULL DEFAULT 'running',
+  started_at        timestamptz NOT NULL DEFAULT now(),
+  finished_at       timestamptz,
+  pages_fetched     integer NOT NULL DEFAULT 0,
+  cards_upserted    integer NOT NULL DEFAULT 0,
+  editions_upserted integer NOT NULL DEFAULT 0,
+  images_fetched    integer NOT NULL DEFAULT 0,
+  error             text,
+  CONSTRAINT sync_run_finished CHECK ((status = 'running') = (finished_at IS NULL))
+);
+
+-- ===========================================================================
+-- ACCOUNTS & SOCIAL (1, 4)
+-- ===========================================================================
+
+CREATE TABLE account (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         citext NOT NULL UNIQUE,
+  display_name  text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- Friendship is mutual and accepted (1), so it is ONE row, not two.
+-- The pair is stored in a canonical order to make that structurally true:
+-- (a,b) and (b,a) cannot both exist. Direction lives in requested_by_id.
+CREATE TABLE friendship (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_lo_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  account_hi_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  status           friendship_status NOT NULL DEFAULT 'pending',
+  requested_by_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  requested_at     timestamptz NOT NULL DEFAULT now(),
+  responded_at     timestamptz,
+  CONSTRAINT friendship_ordered   CHECK (account_lo_id < account_hi_id),
+  CONSTRAINT friendship_requester CHECK (requested_by_id IN (account_lo_id, account_hi_id)),
+  CONSTRAINT friendship_responded CHECK ((status = 'pending') = (responded_at IS NULL)),
+  UNIQUE (account_lo_id, account_hi_id)
+);
+
+CREATE INDEX friendship_hi_idx ON friendship (account_hi_id);
+
+-- Visibility is opt-in per game and global across friends (4).
+-- Row present = that game is friend-visible. Absent = private.
+-- No per-friend column, deliberately: that was considered and rejected.
+CREATE TABLE game_share (
+  account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  game_id     uuid NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, game_id)
+);
+
+-- ===========================================================================
+-- INVENTORY (8, 9, 21)
+-- ===========================================================================
+
+-- Flat, user-named (9) — no nesting, no container→slot.
+--
+-- The load-bearing decision of the whole model: a location is either a place
+-- ('physical') or a person ('holder'). A card is on loan precisely when its
+-- quantity sits in a holder location. This is why multiple borrowers
+-- disambiguate themselves, why loans to non-users are not a second model (3),
+-- and why "friends see how many are on loan but not to whom" needs no special
+-- casing — the holder IS a location, and locations are never shared (14).
+CREATE TABLE location (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id         uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  kind               location_kind NOT NULL,
+  -- For 'physical': the box name. For a text-name holder: the person's name.
+  -- NULL for an account-linked holder, where the label resolves through
+  -- holder_account_id so it tracks their display name rather than going stale.
+  name               text,
+  holder_account_id  uuid REFERENCES account(id) ON DELETE RESTRICT,
+  archived_at        timestamptz,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT location_physical_shape CHECK (
+    kind <> 'physical' OR (holder_account_id IS NULL AND name IS NOT NULL)),
+  -- A holder is exactly one of: a linked account, or a bare name (3).
+  CONSTRAINT location_holder_shape CHECK (
+    kind <> 'holder' OR num_nonnulls(holder_account_id, name) = 1),
+  CONSTRAINT location_not_self CHECK (holder_account_id IS DISTINCT FROM account_id),
+
+  -- Lets holding and placement prove same-owner via composite FK (below).
+  UNIQUE (id, account_id)
+);
+
+CREATE UNIQUE INDEX location_physical_name_key
+  ON location (account_id, lower(name))
+  WHERE kind = 'physical' AND archived_at IS NULL;
+
+-- One holder location per person, per owner — so Sarah is a single bucket
+-- however many separate loans she is holding.
+CREATE UNIQUE INDEX location_holder_account_key
+  ON location (account_id, holder_account_id)
+  WHERE holder_account_id IS NOT NULL;
+
+CREATE UNIQUE INDEX location_holder_name_key
+  ON location (account_id, lower(name))
+  WHERE kind = 'holder' AND holder_account_id IS NULL;
+
+-- A quantity bucket. There are no per-copy records anywhere in this schema (8).
+--
+-- The bucket key is (edition, finish, location, condition) (21). One person
+-- owning 4 copies of a card can therefore legitimately have 4 holdings. That
+-- is correct for storage and hostile for data entry, so the UI is expected to
+-- present card-level rows that expand into printings.
+CREATE TABLE holding (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  edition_id  uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  finish      card_finish NOT NULL,
+  location_id uuid NOT NULL,
+  condition   card_condition NOT NULL,
+  qty         integer NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT holding_qty_positive CHECK (qty > 0),  -- empty buckets are deleted
+
+  -- The location must belong to the same account as the holding.
+  FOREIGN KEY (location_id, account_id)
+    REFERENCES location (id, account_id) ON DELETE RESTRICT,
+  -- You cannot record a finish that printing was never issued in.
+  FOREIGN KEY (edition_id, finish)
+    REFERENCES card_edition_finish (edition_id, finish) ON DELETE RESTRICT,
+
+  UNIQUE (account_id, edition_id, finish, location_id, condition)
+);
+
+CREATE INDEX holding_account_edition_idx ON holding (account_id, edition_id);
+CREATE INDEX holding_location_idx        ON holding (location_id);
+
+-- ===========================================================================
+-- LOANS (2, 3, 5, 6, 7, 10, 11, 13, 15, 18, 19, 20)
+-- ===========================================================================
+
+-- The batch envelope (11): one hand-off, one acceptance, one notification.
+-- Per-card state lives on loan_line.
+CREATE TABLE loan (
+  id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lender_account_id          uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  -- Who it was handed to originally. Individual lines may since have moved on
+  -- to other holders via approved transfers (18, 19).
+  initial_holder_location_id uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+  status                     loan_status NOT NULL DEFAULT 'pending',
+  note                       text,
+  created_at                 timestamptz NOT NULL DEFAULT now(),
+  accepted_at                timestamptz,   -- NULL for text loans, which skip acceptance (3)
+  closed_at                  timestamptz,
+  CONSTRAINT loan_closed CHECK ((status = 'closed') = (closed_at IS NOT NULL))
+);
+
+CREATE INDEX loan_lender_idx ON loan (lender_account_id, status);
+CREATE INDEX loan_initial_holder_idx ON loan (initial_holder_location_id);
+
+-- ONE PHYSICAL CARD PER ROW — deliberately, and not in conflict with (8).
+--
+-- Decision 13 has the lender set condition at receipt, per card. Two copies
+-- lent together can come back in different conditions, so a line cannot carry
+-- a quantity without needing a condition breakdown inside it. A 60-card deck
+-- is therefore 60 lines. This is a custody record, not an inventory instance:
+-- it exists only while a card is out, and closes when the card comes home.
+CREATE TABLE loan_line (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id             uuid NOT NULL REFERENCES loan(id) ON DELETE CASCADE,
+  edition_id          uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  finish              card_finish NOT NULL,
+
+  -- Where it came from, so the return can suggest it (10). Suggested, never
+  -- applied automatically — the lender confirms or overrides.
+  origin_location_id  uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+  -- Condition when it left, so a downgrade at receipt is visible history (13).
+  departure_condition card_condition NOT NULL,
+
+  -- Current custody. Changes on an approved transfer (18, 19).
+  holder_location_id  uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+
+  status              loan_line_status NOT NULL DEFAULT 'outstanding',
+  sent_at             timestamptz,          -- borrower marked returned (6)
+  received_at         timestamptz,          -- lender confirmed receipt (6)
+  received_condition  card_condition,       -- lender's call at receipt (13)
+  return_location_id  uuid REFERENCES location(id) ON DELETE RESTRICT,
+  close_reason        loan_close_reason,
+  closed_at           timestamptz,
+
+  FOREIGN KEY (edition_id, finish)
+    REFERENCES card_edition_finish (edition_id, finish) ON DELETE RESTRICT,
+
+  CONSTRAINT loan_line_in_transit CHECK (status <> 'in_transit' OR sent_at IS NOT NULL),
+  CONSTRAINT loan_line_closed     CHECK (
+    (status IN ('returned', 'written_off')) = (closed_at IS NOT NULL)),
+  CONSTRAINT loan_line_reason     CHECK ((closed_at IS NULL) = (close_reason IS NULL)),
+  -- A normal confirmed return must say what came back and where it went.
+  CONSTRAINT loan_line_receipt    CHECK (
+    close_reason <> 'returned_confirmed'
+    OR (received_at IS NOT NULL
+        AND received_condition IS NOT NULL
+        AND return_location_id IS NOT NULL)),
+  -- A write-off means the card never came back.
+  CONSTRAINT loan_line_write_off  CHECK (
+    close_reason <> 'force_closed_written_off'
+    OR (received_at IS NULL AND return_location_id IS NULL))
+);
+
+CREATE INDEX loan_line_loan_idx   ON loan_line (loan_id);
+CREATE INDEX loan_line_holder_idx ON loan_line (holder_location_id)
+  WHERE status IN ('outstanding', 'in_transit');
+
+-- Where the *borrower* filed a card they are holding (7). Their location,
+-- their data — everything else about the card belongs to the lender. Keyed by
+-- account rather than sitting on loan_line so it survives a transfer: Mike
+-- files it in his own box without disturbing Sarah's historical placement.
+CREATE TABLE loan_line_placement (
+  loan_line_id  uuid NOT NULL REFERENCES loan_line(id) ON DELETE CASCADE,
+  account_id    uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  location_id   uuid NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (loan_line_id, account_id),
+  FOREIGN KEY (location_id, account_id)
+    REFERENCES location (id, account_id) ON DELETE RESTRICT
+);
+
+-- Sub-loans (18, 19, 20). The borrower initiates; the owner must approve.
+-- The recipient may be anyone — the owner's friend, the borrower's friend, or
+-- a text-name non-user — because owner approval is the actual gate (20).
+--
+-- Approval is a full transfer of responsibility (19): loan_line.holder_location_id
+-- moves, the previous holder is released, and the card returns directly to the
+-- owner. These rows are the retained custody trail.
+CREATE TABLE loan_transfer (
+  id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_line_id             uuid NOT NULL REFERENCES loan_line(id) ON DELETE CASCADE,
+  from_location_id         uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+  to_location_id           uuid NOT NULL REFERENCES location(id) ON DELETE RESTRICT,
+  initiated_by_account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  status                   transfer_status NOT NULL DEFAULT 'pending',
+  owner_approved_at        timestamptz,
+  -- NULL for a text-name recipient, who cannot accept anything (3).
+  recipient_accepted_at    timestamptz,
+  resolved_at              timestamptz,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT transfer_distinct CHECK (from_location_id <> to_location_id),
+  CONSTRAINT transfer_resolved CHECK ((status = 'pending') = (resolved_at IS NULL)),
+  CONSTRAINT transfer_approval CHECK (
+    status <> 'approved' OR owner_approved_at IS NOT NULL)
+);
+
+-- At most one transfer in flight per card.
+CREATE UNIQUE INDEX loan_transfer_one_pending
+  ON loan_transfer (loan_line_id) WHERE status = 'pending';
+
+CREATE INDEX loan_transfer_line_idx ON loan_transfer (loan_line_id);
+
+-- ===========================================================================
+-- VIEWS
+-- ===========================================================================
+
+-- What a friend is allowed to see for a shared game (14): cards, quantities,
+-- conditions — and how many are out on loan, but never where or with whom.
+--
+-- Note there is no location column. That absence is the privacy rule.
+CREATE VIEW friend_visible_holding AS
+SELECT
+  h.account_id,
+  c.game_id,
+  e.card_id,
+  h.edition_id,
+  h.finish,
+  h.condition,
+  sum(h.qty)                                            AS qty_total,
+  coalesce(sum(h.qty) FILTER (WHERE l.kind = 'holder'), 0) AS qty_on_loan
+FROM holding h
+  JOIN location     l  ON l.id = h.location_id
+  JOIN card_edition e  ON e.id = h.edition_id
+  JOIN card         c  ON c.id = e.card_id
+  JOIN game_share   gs ON gs.account_id = h.account_id AND gs.game_id = c.game_id
+GROUP BY h.account_id, c.game_id, e.card_id, h.edition_id, h.finish, h.condition;
+
+-- Every card currently in someone else's hands, with both parties resolved.
+-- Backs the unfriend block (5): a friendship may not be dissolved while any
+-- row here joins the two accounts.
+CREATE VIEW open_custody AS
+SELECT
+  ll.id              AS loan_line_id,
+  ln.id              AS loan_id,
+  ln.lender_account_id,
+  loc.id             AS holder_location_id,
+  loc.holder_account_id,
+  loc.name           AS holder_name,
+  ll.edition_id,
+  ll.finish,
+  ll.departure_condition,
+  ll.status
+FROM loan_line ll
+  JOIN loan     ln  ON ln.id = ll.loan_id
+  JOIN location loc ON loc.id = ll.holder_location_id
+WHERE ll.status IN ('outstanding', 'in_transit');
+
+-- ===========================================================================
+-- INVARIANTS ENFORCED IN APPLICATION CODE
+--
+-- Recorded here so they are not lost. Each needs a test.
+--
+--  a. (2)  Creating a loan against an account-linked holder requires an
+--          accepted friendship. Sub-loan recipients are exempt (20).
+--  b. (2)  A pending loan grants nothing: lines stay outstanding and no
+--          holding moves until the borrower accepts. Text loans (3) skip
+--          straight to active.
+--  c. (10) Accepting a loan moves qty from the origin physical bucket into the
+--          holder bucket. Confirming receipt moves it back — to the suggested
+--          origin unless the lender overrides.
+--  d. (5)  An unfriend is refused while open_custody joins the two accounts,
+--          in either direction. Force-close is the escape hatch.
+--  e. (15) Force-close acts on individual lines, never a whole loan at once.
+--  f. (7)  Borrowed cards are excluded from the borrower's collection counts
+--          and value totals, and are read-only to them apart from placement.
+--  g. (19) Approving a transfer updates holder_location_id, moves the holding
+--          between holder buckets, and leaves the loan_transfer row as history.
+--  h. (11) A loan closes when its last line closes.
+--  i. (12) Catalog tables are written only by the ingest, never by users.
+-- ===========================================================================

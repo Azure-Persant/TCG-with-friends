@@ -22,7 +22,7 @@
 // real ones, and every user would resolve to nobody. It is opt-in behind
 // --local, and refuses to run against a supabase.com host at all.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import pg from 'pg'
@@ -46,6 +46,82 @@ const TEST_FILES = [
   'tests/auth_smoke.sql',
 ]
 
+/** The verification pass, as plain SQL, for the Supabase editor. */
+const VERIFY_SQL = `
+WITH t AS (
+  SELECT c.relname, c.relrowsecurity,
+         (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relkind = 'r'
+)
+SELECT * FROM (
+  SELECT 1 AS n, 'tables present' AS check_name,
+         CASE WHEN count(*) = 23 THEN 'PASS' ELSE 'FAIL' END AS result,
+         count(*) || ' of 23' AS detail
+    FROM t
+
+  UNION ALL
+  SELECT 2, 'row level security on every table',
+         CASE WHEN count(*) FILTER (WHERE NOT relrowsecurity) = 0 THEN 'PASS' ELSE 'FAIL' END,
+         coalesce(string_agg(relname, ', ') FILTER (WHERE NOT relrowsecurity),
+                  'all protected')
+    FROM t
+
+  UNION ALL
+  -- RLS on with no policy denies everything. Intended for catalog_sync_run,
+  -- a bug anywhere else -- it shows up as a permanently empty screen.
+  SELECT 3, 'every user-facing table has a policy',
+         CASE WHEN count(*) FILTER (
+                WHERE policies = 0 AND relname <> 'catalog_sync_run') = 0
+              THEN 'PASS' ELSE 'FAIL' END,
+         coalesce(string_agg(relname, ', ') FILTER (
+                    WHERE policies = 0 AND relname <> 'catalog_sync_run'),
+                  'all readable')
+    FROM t
+
+  UNION ALL
+  SELECT 4, 'operational tables stay closed',
+         CASE WHEN count(*) FILTER (
+                WHERE policies > 0 AND relname = 'catalog_sync_run') = 0
+              THEN 'PASS' ELSE 'FAIL' END,
+         'catalog_sync_run is service-role only'
+    FROM t
+
+  UNION ALL
+  SELECT 5, 'mutation functions installed',
+         CASE WHEN count(*) >= 30 THEN 'PASS' ELSE 'FAIL' END,
+         count(*) || ' app_* functions'
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public' AND p.proname LIKE 'app\\_%'
+
+  UNION ALL
+  -- citext lives in the extensions schema on Supabase, not public.
+  SELECT 6, 'citext operators resolve',
+         CASE WHEN ('A'::citext = 'a'::citext) THEN 'PASS' ELSE 'FAIL' END,
+         'case-insensitive email comparison'
+
+  UNION ALL
+  SELECT 7, 'signup creates an account',
+         CASE WHEN count(*) FILTER (WHERE tgname = 'on_auth_user_created') = 1
+              THEN 'PASS' ELSE 'FAIL' END,
+         coalesce(string_agg(tgname, ', '), 'NO TRIGGER on auth.users')
+    FROM pg_trigger
+   WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal
+
+  UNION ALL
+  -- The one that matters most. If these ids do not line up, auth.uid() matches
+  -- nothing and every page in the app is empty, with no error anywhere.
+  SELECT 8, 'every signed-up user has an account row',
+         CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+         CASE WHEN count(*) = 0 THEN 'ids line up'
+              ELSE count(*) || ' auth user(s) with no account' END
+    FROM auth.users u
+   WHERE u.email IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.account a WHERE a.id = u.id)
+) checks
+ORDER BY n;
+`
+
 function parseArgs(argv) {
   const args = {
     url: process.env.DATABASE_URL,
@@ -61,6 +137,7 @@ function parseArgs(argv) {
     else if (a === '--tests') args.tests = true
     else if (a === '--dry-run') args.dryRun = true
     else if (a === '--check') args.check = true
+    else if (a === '--emit') args.emit = argv[++i]
     else if (a === '--help' || a === '-h') args.help = true
     else {
       console.error(`Unknown argument: ${a}`)
@@ -78,6 +155,7 @@ Apply the database files in order.
   node db/apply.mjs --local --tests              ...and run the test suites
   node db/apply.mjs --dry-run                    show the plan, change nothing
   node db/apply.mjs --check                      verify an install, change nothing
+  node db/apply.mjs --emit dist/setup.sql        write one paste-able file
 
 Falls back to $DATABASE_URL when --url is omitted.
 
@@ -228,6 +306,66 @@ async function verify(client, { isSupabase }) {
   return failed
 }
 
+/**
+ * Write every file into one, in order, for pasting into the Supabase SQL
+ * editor.
+ *
+ * This exists because the SQL editor is the only route that needs no terminal,
+ * no Node and no clone -- and pasting five files by hand in the right order is
+ * exactly the mistake this whole script was written to prevent. One file, one
+ * paste, no order to get wrong.
+ */
+function emit(target) {
+  const parts = [
+    `-- ===========================================================================`,
+    `-- Friends Card Inventory -- complete Supabase setup`,
+    `--`,
+    `-- GENERATED FILE. Do not edit. Regenerate with:`,
+    `--   node db/apply.mjs --emit dist/supabase-setup.sql`,
+    `--`,
+    `-- Paste the whole thing into the Supabase SQL editor and press Run. It is`,
+    `-- every file in db/ concatenated in the one order that works, minus the`,
+    `-- local auth shim, which must never reach Supabase.`,
+    `--`,
+    `-- Runs on an EMPTY database. It creates tables and policies, so re-running`,
+    `-- it over itself will fail on the first thing that already exists.`,
+    `-- ===========================================================================`,
+    ``,
+  ]
+
+  for (const [file, label] of SCHEMA_FILES.filter(([, , o]) => !o?.localOnly)) {
+    parts.push(
+      ``,
+      `-- ===========================================================================`,
+      `-- ${file} -- ${label}`,
+      `-- ===========================================================================`,
+      ``,
+      readFileSync(join(HERE, file), 'utf8').trimEnd(),
+      ``,
+    )
+  }
+
+  parts.push(
+    ``,
+    `-- ===========================================================================`,
+    `-- Did it work?`,
+    `--`,
+    `-- The results pane below should show every row saying PASS. Anything else`,
+    `-- means the database is applied but not right -- send it back rather than`,
+    `-- carrying on.`,
+    `-- ===========================================================================`,
+    ``,
+    VERIFY_SQL.trim(),
+    ``,
+  )
+
+  const out = parts.join('\n')
+  mkdirSync(dirname(join(HERE, target)), { recursive: true })
+  writeFileSync(join(HERE, target), out)
+  console.log(`Wrote db/${target} (${out.split('\n').length} lines)`)
+  return 0
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
@@ -235,6 +373,8 @@ async function main() {
     console.log(USAGE)
     return 0
   }
+
+  if (args.emit) return emit(args.emit)
 
   if (!args.url) {
     console.error('No connection string. Pass --url "postgresql://..." or set DATABASE_URL.')

@@ -10,6 +10,23 @@ holding that key can skip.
 
 ## Applying it
 
+### No terminal? Use the browser
+
+`dist/supabase-setup.sql` is every file below concatenated in the right order,
+minus the local shim. Open it on GitHub, copy the raw contents, paste into the
+Supabase **SQL Editor**, press Run. It ends with a verification query, so the
+results pane tells you whether it worked instead of leaving you to guess.
+
+Regenerate it after any schema change:
+
+```bash
+node apply.mjs --emit dist/supabase-setup.sql
+```
+
+It is a **generated file** — edit the sources, never `dist/`.
+
+### With a terminal
+
 ```bash
 npm install
 

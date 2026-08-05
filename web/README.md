@@ -65,8 +65,18 @@ Two environment variables, both from Supabase → Project Settings → Data API:
 
 | Name | Value |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL — just `https://ref.supabase.co`, no path |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key |
+
+`lib/supabase/env.ts` normalises the URL (trailing slashes are stripped) and
+refuses clearly on the mistakes it cannot fix — a URL with a path, or the
+`service_role` key in a `NEXT_PUBLIC_` variable. Left unchecked, a trailing
+slash produces `https://ref.supabase.co//auth/v1/otp` and Supabase answers
+`Invalid path specified in request URL`, which names neither the setting nor
+the slash.
+
+**Environment variable changes do not apply to an existing deployment.** After
+editing one, redeploy.
 
 Then, in Supabase → Authentication → URL Configuration:
 

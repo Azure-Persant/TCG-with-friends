@@ -33,7 +33,7 @@ CREATE OR REPLACE FUNCTION app_provision_account()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   INSERT INTO account (id, email, display_name)
@@ -64,7 +64,7 @@ CREATE OR REPLACE FUNCTION app_sync_account_email()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NEW.email IS DISTINCT FROM OLD.email AND NEW.email IS NOT NULL THEN

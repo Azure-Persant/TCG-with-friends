@@ -24,7 +24,26 @@ npm test -- --url "postgresql://localhost/fci"
 
 # Show the plan without changing anything
 npm run apply -- --url "..." --dry-run
+
+# Verify an existing install without changing anything
+npm run apply -- --url "..." --check
 ```
+
+Applying always ends with the `--check` pass, so you get a verdict rather than
+a guess. Every check corresponds to a way this can fail **silently** — an app
+where everything is empty, or everything is visible — because those are the
+failures worth a round-trip to rule out:
+
+- all 23 tables present
+- RLS enabled on every one of them
+- every user-facing table has a policy (RLS on with no policy denies all)
+- `catalog_sync_run` still has *no* policy — operational data stays closed
+- the mutation functions installed
+- `citext` operators resolve (they live in `extensions` on Supabase, not `public`)
+- the signup trigger is on `auth.users`
+- **every auth user has a matching account** — the one that matters most, since
+  ids that do not line up mean `auth.uid()` matches nothing and every page comes
+  back empty with no error at all
 
 `$DATABASE_URL` is used when `--url` is omitted.
 

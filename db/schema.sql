@@ -5,6 +5,12 @@
 --
 -- Requires PostgreSQL 13+ (uses gen_random_uuid, num_nonnulls, FILTER).
 
+-- On Supabase these are usually already installed, into the `extensions`
+-- schema rather than public. IF NOT EXISTS makes that a no-op, and every
+-- SECURITY DEFINER function pins `search_path = public, extensions` so their
+-- operators still resolve. Do not narrow that back to `public` alone --
+-- citext comparisons inside those functions would stop resolving, and the
+-- failure looks like a type error a long way from here.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pg_trgm;   -- fuzzy card-name search
 CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive email

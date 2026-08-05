@@ -35,7 +35,7 @@ CREATE OR REPLACE FUNCTION app_bucket_adjust(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_current integer;
@@ -78,7 +78,7 @@ CREATE OR REPLACE FUNCTION app_holder_location(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_id uuid;
@@ -112,7 +112,7 @@ CREATE OR REPLACE FUNCTION app_maybe_close_loan(p_loan uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NOT EXISTS (
@@ -128,7 +128,7 @@ CREATE OR REPLACE FUNCTION app_require_lender(p_loan uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM loan WHERE id = p_loan AND lender_account_id = auth.uid()) THEN
@@ -150,7 +150,7 @@ CREATE OR REPLACE FUNCTION app_add_cards(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF p_qty <= 0 THEN RAISE EXCEPTION 'qty must be positive'; END IF;
@@ -183,7 +183,7 @@ CREATE OR REPLACE FUNCTION app_move_cards(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF p_qty <= 0 THEN RAISE EXCEPTION 'qty must be positive'; END IF;
@@ -213,7 +213,7 @@ CREATE OR REPLACE FUNCTION app_require_recipient(p_request uuid)
 RETURNS request
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE r request;
 BEGIN
@@ -237,7 +237,7 @@ CREATE OR REPLACE FUNCTION app_open_request(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_id uuid;
 BEGIN
@@ -258,7 +258,7 @@ CREATE OR REPLACE FUNCTION app_send_friend_request(p_to uuid, p_note text DEFAUL
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF app_is_friend(p_to) THEN RAISE EXCEPTION 'already friends'; END IF;
@@ -275,7 +275,7 @@ CREATE OR REPLACE FUNCTION app_offer_loan(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_req uuid; v_spec jsonb;
 BEGIN
@@ -320,7 +320,7 @@ CREATE OR REPLACE FUNCTION app_request_borrow(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_req uuid; v_spec jsonb;
 BEGIN
@@ -354,7 +354,7 @@ CREATE OR REPLACE FUNCTION app_offer_trade(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_req uuid; v_spec jsonb;
 BEGIN
@@ -400,7 +400,7 @@ CREATE OR REPLACE FUNCTION app_counter_trade(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE r request;
 BEGIN
@@ -419,7 +419,7 @@ CREATE OR REPLACE FUNCTION app_request_sub_loan(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_owner uuid; v_req uuid; v_status loan_line_status;
 BEGIN
@@ -468,7 +468,7 @@ CREATE OR REPLACE FUNCTION app_accept_request(p_request uuid, p_data jsonb DEFAU
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE r request;
 BEGIN
@@ -489,7 +489,7 @@ CREATE OR REPLACE FUNCTION app_decline_request(p_request uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   PERFORM app_require_recipient(p_request);
@@ -501,7 +501,7 @@ CREATE OR REPLACE FUNCTION app_cancel_request(p_request uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NOT EXISTS (
@@ -522,7 +522,7 @@ CREATE OR REPLACE FUNCTION app_materialise_friendship(r request)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   INSERT INTO friendship (account_lo_id, account_hi_id, created_from_request_id)
@@ -543,7 +543,7 @@ CREATE OR REPLACE FUNCTION app_materialise_loan(r request, p_lender uuid, p_data
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_borrower uuid := CASE WHEN p_lender = r.proposer_account_id
@@ -599,7 +599,7 @@ CREATE OR REPLACE FUNCTION app_move_to_holder(p_loan uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_owner uuid; r record;
 BEGIN
@@ -616,7 +616,7 @@ CREATE OR REPLACE FUNCTION app_materialise_sub_loan(r request)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE sl record; ll record; v_to uuid;
 BEGIN
@@ -656,7 +656,7 @@ CREATE OR REPLACE FUNCTION app_materialise_trade(r request)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_trade uuid;
@@ -697,7 +697,7 @@ CREATE OR REPLACE FUNCTION app_trade_reserve(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_src uuid;
 BEGIN
@@ -726,7 +726,7 @@ CREATE OR REPLACE FUNCTION app_trade_maybe_complete(p_trade uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NOT EXISTS (
@@ -749,7 +749,7 @@ CREATE OR REPLACE FUNCTION app_confirm_trade_item(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE it trade_item; v_cond card_condition; v_dest uuid;
 BEGIN
@@ -801,7 +801,7 @@ CREATE OR REPLACE FUNCTION app_write_off_trade_item(p_item uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE it trade_item;
 BEGIN
@@ -829,7 +829,7 @@ CREATE OR REPLACE FUNCTION app_set_listing(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not signed in'; END IF;
@@ -864,7 +864,7 @@ CREATE OR REPLACE FUNCTION app_request_unlisted(p_request uuid)
 RETURNS TABLE (edition_id uuid, finish card_finish, qty integer)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE r request;
 BEGIN
@@ -900,7 +900,7 @@ CREATE OR REPLACE FUNCTION app_mark_returned(p_line uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
   IF NOT app_is_holder_of_line(p_line) THEN
@@ -929,7 +929,7 @@ CREATE OR REPLACE FUNCTION app_confirm_receipt(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   r        record;
@@ -987,7 +987,7 @@ CREATE OR REPLACE FUNCTION app_force_close_line(
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   r      record;
@@ -1043,7 +1043,7 @@ CREATE OR REPLACE FUNCTION app_lend_to_name(
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_holder uuid; v_loan uuid; v_spec jsonb; i integer;
 BEGIN
@@ -1088,7 +1088,7 @@ CREATE OR REPLACE FUNCTION app_unfriend(p_other uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE v_me uuid := auth.uid(); v_open integer;
 BEGIN

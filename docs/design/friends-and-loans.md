@@ -221,19 +221,66 @@ Under the holder-location model this is a clean operation: the quantity moves
 from one holder location to another inside the owner's inventory, so the
 owner's view always answers "who has my card right now".
 
+### 19. A sub-loan fully transfers borrower status, but history is retained
+
+Once the owner approves Sarah → Mike:
+
+- Mike becomes the borrower; Sarah is released from responsibility
+- The card returns **directly to the owner**, not back through Sarah
+- The loan history still records that it passed through Sarah
+
+Keeping the custody trail matters for the case the whole feature exists to
+handle: knowing who had a card when it came back damaged or never came back at
+all.
+
+### 20. A sub-loan may go to anyone — owner approval is the gate
+
+The borrower may pass a card to their own friend or to a text-name non-user.
+The recipient need not be the owner's friend.
+
+**Why:** the owner approves every transfer regardless (18), so approval is the
+real protection. Requiring mutual friendship as well would block the ordinary
+case where a friend's playgroup needs a card, without adding any safety the
+approval step doesn't already provide.
+
+Note this is the one place a `holder` location may point at an account the
+owner has no friendship with.
+
+### 21. A holding is keyed by edition and finish
+
+The full bucket key is:
+
+```
+(edition, finish, location, condition, qty)
+```
+
+A foil Abyssal Heaven printing is a different holding from the non-foil, and
+from the same card printed in another set. GATCG exposes editions and tracks
+foil/non-foil circulations separately, so this data is available for free at
+ingest.
+
+**Why not card-level:** foils routinely carry many times the value of the same
+card, and collectors care which set a copy came from. Aggregating them would
+make every value total wrong.
+
+Card-level *display* (one row per card, expandable to printings) is a UI
+concern layered on top of edition-level storage.
+
+### 22. All images are pre-fetched at ingest
+
+One backfill job pulls all ~6,400 images (~1.3 GB) into our storage. No runtime
+dependency on gatcg.com, no first-viewer latency, predictable cost. The job
+re-runs when new sets release.
+
 ## Open questions
 
-Blocking further schema work.
+1. **Confirm GATCG's terms permit mirroring their card images** before running
+   the full backfill (22). Self-hosting is the right architecture regardless;
+   this is about whether redistribution is permitted, and is worth a direct ask
+   to the maintainers.
 
-1. **What happens to the original borrower after an approved sub-loan?** Full
-   transfer (Sarah is out, Mike is the borrower), or a chain of custody where
-   Sarah stays liable and the card must come back through her?
-2. **Must a sub-loan recipient be the owner's friend?** Or may the borrower
-   pass it to their own friend, or to a text-name non-user, with the owner's
-   approval being the only gate?
-3. **What identifies a holding — a card, a printing, or a printing plus
-   finish?** GATCG averages 2.86 editions per card and tracks foil and non-foil
-   circulations separately. Collectors usually care about all three.
-4. **Mirror strategy for images:** pre-fetch all ~6,400 at ingest, or cache
-   lazily on first view? Also worth confirming GATCG's terms permit
-   redistribution before mirroring the full set.
+## Next step
+
+The model is settled enough to draft schema: accounts, friendships, locations
+(with kind), catalog tables (card / edition / set), holdings, loans, and
+per-card loan lines.

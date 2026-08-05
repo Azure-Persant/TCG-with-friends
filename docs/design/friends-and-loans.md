@@ -402,6 +402,42 @@ coincides with a trade, the cards move through (24) like anything else. The
 `asking_price` column is a number the owner types and the app displays. It is
 never authoritative and nothing computes against it.
 
+### 30. Sign-in is a magic link, and there are no passwords
+
+Supabase Auth, email one-time link, no password field anywhere.
+
+A password would bring a reset flow, strength rules, a hashing decision to get
+right, and a credential worth stealing -- all to protect a list of which
+friend has your cards. A link in an inbox needs none of that and cannot be
+reused, phished off a sticky note, or shared between two people who "both use
+the same login".
+
+**Cost:** signing in requires reaching your email, which is friction at a
+kitchen table mid-game. If that turns out to matter, the fix is a longer
+session, not a password.
+
+### 31. `account.id` IS `auth.users.id`
+
+Every policy in this project compares something to `auth.uid()`, which returns
+the id of a row in Supabase's `auth.users`. Every one of those comparisons is
+against an `account_id`. So the two ids must be the same value, and a trigger
+in `db/auth_bridge.sql` provisions the account row on signup to guarantee it.
+
+**Why this gets its own file and its own test.** If the ids ever diverge,
+nothing errors. `auth.uid()` simply matches no account, and every policy
+denies everything: empty collection, empty friend list, empty inbox, no
+message. It is the one failure in this design that looks exactly like "the app
+has no data in it", and it would be debugged from the wrong end for hours.
+
+**Deleting an auth user does not cascade.** There is deliberately no foreign
+key from `account.id` to `auth.users.id`. A cascade would tear through
+friendship, location, holding and loan -- and (5) exists precisely to stop a
+relationship dissolving while cards are still outstanding. Cascading drives
+straight past that check: your friend deletes their login and the record of
+who has your cards goes with it. An orphaned account row is the intended
+outcome, because the person still owed cards needs the history more than the
+database needs tidiness.
+
 ## Open questions
 
 None. The image-mirroring question was resolved by precedent —
@@ -465,7 +501,6 @@ only while a card is away and closes when it comes home; a holding is an
 
 ## Still to design
 
-- Authentication and session handling
 - The GATCG ingest worker itself (paginated crawl + image backfill)
 - **Notifications.** Now the largest gap. Every flow in this document assumes
   something tells the other person, and (23) makes it worse in a useful way:

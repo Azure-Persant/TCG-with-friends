@@ -73,7 +73,7 @@ INSERT INTO holding (account_id, edition_id, finish, location_id, condition, qty
 -- ---------------------------------------------------------------------------
 
 SET LOCAL ROLE app_user;
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000002';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000002');
 
 DO $$
 DECLARE n bigint; total bigint; onloan bigint;
@@ -110,7 +110,7 @@ END $$;
 -- As a STRANGER
 -- ---------------------------------------------------------------------------
 
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000003';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000003');
 
 DO $$
 DECLARE n bigint;
@@ -133,7 +133,7 @@ END $$;
 -- As the OWNER
 -- ---------------------------------------------------------------------------
 
-SET LOCAL app.current_user_id = '50000000-0000-0000-0000-000000000001';
+SELECT auth.act_as('50000000-0000-0000-0000-000000000001');
 
 DO $$
 DECLARE n bigint;

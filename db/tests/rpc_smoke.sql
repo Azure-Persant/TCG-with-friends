@@ -27,7 +27,7 @@ END $$;
 
 CREATE OR REPLACE FUNCTION pg_temp.act_as(who uuid)
 RETURNS void LANGUAGE plpgsql AS $$
-BEGIN PERFORM set_config('app.current_user_id', who::text, true); END $$;
+BEGIN PERFORM auth.act_as(who); END $$;
 
 /**
  * Quantity in one bucket, 0 if the bucket has been deleted.

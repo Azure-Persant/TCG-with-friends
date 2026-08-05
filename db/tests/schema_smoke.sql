@@ -91,7 +91,7 @@ $$, '(1) friendship with yourself');
 -- Only matters if db/policies.sql has also been loaded: friend_visible_holding
 -- is auth-aware there and returns nothing to an anonymous caller. Harmless
 -- when testing schema.sql on its own, which keeps this file portable.
-SELECT set_config('app.current_user_id', 'aaaaaaaa-0000-0000-0000-000000000001', true);
+SELECT auth.act_as('aaaaaaaa-0000-0000-0000-000000000001');
 
 -- (4) Owner shares Grand Archive with all friends.
 INSERT INTO game_share (account_id, game_id)

@@ -4,11 +4,11 @@ Everything established so far, for whoever picks this up next — including a
 future me.
 
 **Status:** design settled, database built and tested, all mutations
-implemented as Postgres functions, catalog ingest working.
-**No UI code exists yet.**
+implemented as Postgres functions, catalog ingest working, and a Next.js app
+with working auth covering sign-in, your collection, and the request inbox.
 
 Loans, borrows, trades, friend requests and sub-loans are all implemented and
-tested. 57 assertions across four suites.
+tested. 68 assertions across five suites.
 
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
@@ -152,6 +152,23 @@ table must do it through a `SECURITY DEFINER` helper (`app_is_lender_of_loan`,
 Those run with the definer's rights, so the inner query skips RLS and the cycle
 breaks. Do not inline those `EXISTS` clauses back into a policy.
 
+### The auth shim had never been tested against real auth
+
+Every policy and function was written against `auth.uid()`, but the local
+`auth_shim.sql` implemented that as a read of a bespoke `app.current_user_id`
+setting. Supabase reads the `sub` claim out of `request.jwt.claims`. So the
+project's entire privacy model had been proven against a function that did not
+resemble the one it would run against.
+
+The shim now implements the real formula, and all five suites drive it through
+forged JWT claims. Everything still passed — but that was a coin-flip, not a
+result, and it is the sort of gap that surfaces in production as "why is
+everything empty".
+
+**Still untested:** whether Supabase actually sets those claims the way this
+assumes. That needs a real project, and it is the first thing to check once
+one exists (see below).
+
 ### One request table, or five copies of the same flow
 
 Friend requests, loan acceptances and sub-loan transfers were each built with
@@ -198,6 +215,9 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/rls_smoke.sql` | Owner / friend / stranger visibility, as an unprivileged role. |
 | `db/tests/rpc_smoke.sql` | Full loan lifecycle through the RPCs, as an unprivileged role. |
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
+| `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
+| `db/auth_bridge.sql` | Provisions an account per auth user (31). |
+| `web/` | Next.js app: login, collection, inbox. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
@@ -294,7 +314,7 @@ else about the card is the lender's.
    `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
    `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
    so this is UI over a tested backend.
-4. **Notifications** — still the largest gap, and (23) has changed its shape
+4. **Notifications** — the largest remaining gap, and (23) has changed its shape
    for the better: there is now exactly one table to watch and one place to
    emit from, rather than five. Every flow assumes something tells the other
    person; nothing does yet.

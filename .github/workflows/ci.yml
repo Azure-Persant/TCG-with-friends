@@ -66,6 +66,9 @@ jobs:
       - name: Request, trade and listing tests
         run: $PSQL -f db/tests/request_smoke.sql
 
+      - name: Auth bridge tests
+        run: $PSQL -f db/tests/auth_smoke.sql
+
       # functions.sql is all CREATE OR REPLACE, so re-applying it to a live
       # database must be safe -- that is how it will be deployed. (policies.sql
       # is NOT idempotent: CREATE POLICY has no IF NOT EXISTS, so it is not
@@ -75,6 +78,7 @@ jobs:
           $PSQL -f db/functions.sql
           $PSQL -f db/tests/rpc_smoke.sql
           $PSQL -f db/tests/request_smoke.sql
+          $PSQL -f db/tests/auth_smoke.sql
 
   ingest:
     name: Ingest worker
@@ -94,3 +98,32 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
+
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Placeholders. The build only needs these to exist -- nothing is
+      # contacted at build time, and the anon key is public anyway (it grants
+      # nothing without a session, because RLS does the work).
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run build
+
+      - run: npx eslint .

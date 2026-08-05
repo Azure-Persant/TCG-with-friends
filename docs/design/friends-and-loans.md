@@ -1,8 +1,21 @@
-# Friends & Loans — Decision Record
+# Friends, Loans & Inventory — Decision Record
 
 Status: **in progress.** Captures decisions made during design review. Open
 questions at the bottom are not yet decided and should not be implemented
 around until they are.
+
+## Core model
+
+Three independent axes, deliberately not collapsed into each other:
+
+| Axis | What it is | Who defines it | Drives |
+|---|---|---|---|
+| **Game / IP** | Pokémon, Magic, a sports league | The catalog | Sharing |
+| **Location** | Box A, Binder 1, Safe deposit | The user | Physical storage |
+| **Condition** | NM, LP, … | The user, per holding | Value, bucket identity |
+
+A **holding** is the tuple `(card, location, condition, qty)`. There are no
+individually tracked copy records — see (8).
 
 ## Decided
 
@@ -15,8 +28,8 @@ parties agree.
 associated with a real account rather than a typed-in name. That requirement
 is what makes friendship structural rather than cosmetic.
 
-**Implies:** friend requests have a pending state, and requests can be
-declined, cancelled, and (presumably) re-sent.
+**Implies:** friend requests have a pending state, and can be declined,
+cancelled, and re-sent.
 
 ### 2. Loans require borrower acceptance
 
@@ -40,13 +53,18 @@ both:
 | Visible to borrower | yes | n/a |
 | Return flow | two-step (see 6) | lender marks returned |
 
-### 4. Friend visibility is opt-in per collection
+### 4. Visibility is opt-in per game, globally across friends
 
-Cards are private by default. The owner marks collections as friend-visible.
-Accepting a friend request grants no blanket read access.
+Cards are private by default. The owner switches a **game** to friend-visible
+— "my Pokémon is shared, my Magic is private" — and that setting applies to
+every friend equally. There is no per-friend variation.
+
+Note that a game is an attribute the card already carries from the catalog,
+not a grouping the user builds. Sharing therefore needs no grouping table of
+its own, and cannot drift out of sync with storage.
 
 **Exception:** a borrower can always see the card they are currently holding,
-regardless of the collection's visibility setting.
+regardless of that game's visibility setting.
 
 ### 5. Unfriending is blocked while a loan is open — but the lender can force-close
 
@@ -61,56 +79,90 @@ loan open forever and hold the relationship hostage over a low-value card.
 
 ### 6. Return flow: borrower sends, lender confirms
 
-1. Borrower marks the card **returned** → loan enters **in-transit**
-2. Lender confirms **receipt** → loan **closed**
+1. Borrower marks a card **returned** → it enters **in-transit**
+2. Lender confirms **receipt** → that card is **closed**
 
-Mirrors the acceptance flow in (2) and survives mail delays, where the card has
+Mirrors the acceptance flow in (2) and survives mail delays, where a card has
 left one person's hands but not yet reached the other's. The lender's
 force-close from (5) can short-circuit this from any state.
 
-### 7. Borrowed cards are read-only shadows for the borrower
+### 7. Borrowed cards are read-only shadows, but the borrower files them
 
 A borrowed card appears in the borrower's app under a **Borrowed** section. It
 is:
 
 - excluded from their collection counts
 - excluded from their collection value totals
-- not editable by them
+- not editable by them — condition, quantity and card details stay the
+  lender's data
 
-This keeps a hard line between *owned* and *merely held*.
+The borrower **does** assign it one of their own locations, so they can
+actually find a card they are responsible for. The location is the borrower's
+data; everything else about the card is the lender's.
 
-### 8. Card identity: hybrid, with location as a first-class part of inventory
+### 8. Holdings are quantity buckets keyed by condition — no instance records
 
-A card is neither purely a catalog row with a count, nor purely a set of
-individually tracked physical copies. Holdings are tracked per **location**,
-and a loan is one of the places a copy can be.
+A holding is `(card, location, condition, qty)`. Nothing ever promotes a copy
+to individually tracked status: 2 Near Mint in Box A and 1 Lightly Played in
+Box A are simply two buckets. One uniform shape, no split logic anywhere in
+the codebase.
 
 Worked example — a user owns 4 copies of one card:
 
-| Location | Qty |
-|---|---|
-| Box A | 2 |
-| Box B | 1 |
-| On loan | 1 |
-| **Total** | **4** |
+| Location | Condition | Qty |
+|---|---|---|
+| Box A | NM | 2 |
+| Box B | NM | 1 |
+| On loan | NM | 1 |
+| **Total** | | **4** |
+
+### 9. Locations are a flat, user-named list
+
+"Box A", "Binder 1", "Safe deposit". No container→slot hierarchy, no nesting.
+
+### 10. "On loan" is a virtual location that remembers where the card came from
+
+- Loaning a card **automatically** moves it out of Box A into the system
+  **On loan** bucket, so counts always match physical reality.
+- The origin location is stored on the loan.
+- On return, the origin is **suggested** as the destination and pre-filled —
+  but the user confirms or overrides it. The re-file is never automatic.
+
+### 11. A loan is a batch in, but returns are per-card
+
+Lending a 60-card deck is **one** loan: one hand-off, one acceptance, one
+notification. Cards are then checked back in **individually** as they come
+back, so a partial return (58 of 60) is a first-class state rather than an
+error.
+
+This means a loan has a status *and* each card line within it has a status.
+
+### 12. Cards come from a shared catalog, imported per game
+
+Users add holdings against real catalog entries (name, set, number, image) and
+never invent cards. This is what makes search, images, cross-user comparison,
+and later pricing possible.
+
+**Cost:** an import pipeline is required per game before that game is usable.
 
 ## Open questions
 
 Blocking further schema work.
 
-1. **Is "on loan" literally a location bucket?** Leading option: a virtual
-   location that remembers the copy came from Box A, so confirming the return
-   re-files it automatically. Alternatives: no memory (re-file by hand on
-   return), or purely derived from the loan table (but then Box A's stored
-   count includes cards that aren't physically in Box A).
-2. **Is a collection the same thing as a location?** (4) shares per
-   *collection*, (8) stores per *location*. Either they're one concept — share
-   per location, fewer moving parts, but sharing is tied to physical storage —
-   or two, with curated collections spanning locations.
-3. **How are locations structured?** Flat user-named list ("Box A", "Binder 1",
-   "Safe deposit"), two levels (container → slot), or arbitrary nesting.
-4. **In the hybrid model, what promotes a copy to individual tracking?**
-   Leading option: nothing does — make condition part of the bucket key, so a
-   holding is `(card, location, condition, qty)` and there is only ever one
-   shape. Alternatives: grading promotes a copy to its own record, or a manual
-   pin does.
+1. **Who sets condition when a card comes back, and what if it changed?**
+   Because condition is part of the bucket key (8), a card returned in worse
+   shape belongs in a *different* bucket than the one it left. Does the lender
+   set condition at receipt confirmation? Is the original condition recorded on
+   the loan so a downgrade is visible?
+2. **What does a friend actually see for a visible game?** Just which cards you
+   own, or also quantities, conditions, and locations? Locations arguably stay
+   private even for a shared game. Also: is a card that's currently on loan
+   shown to friends as such?
+3. **Force-close granularity against a batch loan.** Does the lender's
+   force-close (5) settle an entire loan at once, or individual outstanding
+   cards within it?
+4. **Can a borrower loan onward?** If someone borrows your deck, can they lend
+   one of its cards to a third person? Almost certainly no — but it should be
+   an explicit rule, since the borrower does hold the card.
+5. **Which games ship first, and from which catalog source?** (12) needs at
+   least one real import pipeline to be useful at all.

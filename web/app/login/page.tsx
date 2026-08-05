@@ -8,6 +8,24 @@ const LINK_FAILED =
   'That sign-in link did not work. It may have expired or already been used — request a new one below.'
 
 /**
+ * Supabase's gateway answers this when the request path matches no route,
+ * which in practice always means NEXT_PUBLIC_SUPABASE_URL is malformed -- a
+ * trailing slash, or a whole endpoint pasted where the project URL belongs.
+ * The message names neither the setting nor the mistake, so say it here.
+ */
+function explain(message: string): string {
+  if (message.toLowerCase().includes('invalid path specified')) {
+    return (
+      `${message} — this almost always means NEXT_PUBLIC_SUPABASE_URL is wrong. ` +
+      'It should be exactly https://YOURREF.supabase.co with no trailing slash ' +
+      'and no path. Fix it in Vercel, then redeploy: env changes do not affect ' +
+      'a deployment that is already running.'
+    )
+  }
+  return message
+}
+
+/**
  * Magic-link sign in.
  *
  * No passwords, deliberately. Passwords mean reset flows, strength rules and
@@ -58,7 +76,7 @@ function LoginForm() {
     })
 
     setBusy(false)
-    if (error) setSubmitError(error.message)
+    if (error) setSubmitError(explain(error.message))
     else setSent(true)
   }
 

@@ -159,9 +159,10 @@ Apply the database files in order.
 
 Falls back to $DATABASE_URL when --url is omitted.
 
-Get the Supabase URL from: Project Settings -> Database -> Connection string.
-Use the DIRECT connection (port 5432), not the transaction pooler (6543) --
-the pooler does not keep a session, and these scripts rely on one.
+Get the Supabase URL from the dashboard's green "Connect" button.
+Use SESSION pooler (port 5432), not Transaction pooler (6543): transaction mode
+does not keep a session between statements and these scripts need one.
+Direct connection also works, but is IPv6-only without the paid IPv4 add-on.
 `
 
 function plan(args) {
@@ -392,8 +393,8 @@ async function main() {
   }
 
   if (isSupabase && /:6543\//.test(args.url)) {
-    console.error('That looks like the transaction pooler (port 6543).')
-    console.error('Use the direct connection on port 5432 -- these scripts need a real session.')
+    console.error('That looks like the Transaction pooler (port 6543).')
+    console.error('Use the Session pooler on port 5432 -- these scripts need a real session.')
     return 2
   }
 

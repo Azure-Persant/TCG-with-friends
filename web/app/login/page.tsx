@@ -1,11 +1,11 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const LINK_FAILED =
-  'That sign-in link did not work. It may have expired or already been used — request a new one below.'
+  'That sign-in link did not work. It may have expired or already been used — request a new code below.'
 
 /**
  * Supabase's gateway answers this when the request path matches no route,
@@ -26,11 +26,19 @@ function explain(message: string): string {
 }
 
 /**
- * Magic-link sign in.
+ * Sign in with an emailed code (30).
  *
- * No passwords, deliberately. Passwords mean reset flows, strength rules and
- * a credential worth stealing; for a small group of friends a link in an
- * inbox is both simpler to build and harder to get wrong.
+ * A CODE, not a link, and that distinction is load-bearing. Corporate mail
+ * filters -- Microsoft Safe Links, Proofpoint URL Defense and friends --
+ * pre-fetch every URL in an incoming message to check it is safe. A magic link
+ * is a single-use token, so the scanner spends it before the recipient ever
+ * clicks, and sign-in fails with no way for either side to tell why. A number
+ * typed by hand cannot be consumed by a machine following a URL.
+ *
+ * This only works if the Supabase email template sends the code and NOT a
+ * link. If the template contains {{ .ConfirmationURL }}, a scanner following
+ * it burns the same token the code represents, and the code stops working too.
+ * See web/README.md.
  */
 export default function LoginPage() {
   // useSearchParams needs a Suspense boundary, because it forces this subtree
@@ -44,8 +52,11 @@ export default function LoginPage() {
 
 function LoginForm() {
   const params = useSearchParams()
+  const router = useRouter()
+
+  const [step, setStep] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [code, setCode] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -53,72 +64,135 @@ function LoginForm() {
   // Derived during render rather than set in an effect: a value that is a pure
   // function of the URL is not state, and treating it as state means rendering
   // once with the wrong answer.
-  //
-  // A submit error supersedes it -- once you have tried again, the message
-  // about the old link is stale.
   const error = submitError ?? (params.get('error') === 'link' ? LINK_FAILED : null)
 
-  async function signIn(e: React.FormEvent) {
+  async function sendCode(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setSubmitError(null)
 
     const supabase = createClient()
-    const next = params.get('next') ?? '/collection'
-
-    // window.location.origin, not a hardcoded URL: this has to be right on
-    // localhost, on Vercel previews and in production without a rebuild.
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}`,
-      },
-    })
+    // Deliberately no emailRedirectTo. There is no link to redirect to -- the
+    // email carries a code, and adding a link back would reintroduce exactly
+    // the token a scanner can spend.
+    const { error } = await supabase.auth.signInWithOtp({ email })
 
     setBusy(false)
     if (error) setSubmitError(explain(error.message))
-    else setSent(true)
+    else setStep('code')
   }
 
-  return (
-    <Shell>
-      {sent ? (
-        <div className="mt-8 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-          <p className="font-medium">Check your email</p>
-          <p className="mt-1 text-neutral-500">
-            We sent a sign-in link to <span className="font-medium">{email}</span>. It expires in
-            an hour.
-          </p>
-        </div>
-      ) : (
-        <form onSubmit={signIn} className="mt-8 flex flex-col gap-3">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setSubmitError(null)
+
+    const supabase = createClient()
+
+    // 'email' covers an existing user. A brand new account is confirmed under
+    // 'signup', and the caller cannot know which they are, so try the second
+    // if the first is rejected. Getting this wrong strands the very first
+    // person to sign up -- which, here, is the owner of the app.
+    let { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' })
+    if (error) {
+      const retry = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' })
+      if (!retry.error) error = null
+    }
+
+    setBusy(false)
+
+    if (error) {
+      setSubmitError(
+        error.message.toLowerCase().includes('expired')
+          ? 'That code has expired. Request a new one.'
+          : 'That code was not accepted. Check the digits and try again.',
+      )
+      return
+    }
+
+    // refresh() so the server re-renders with the new session cookie; push()
+    // alone would navigate with the old, signed-out render still cached.
+    const next = params.get('next') ?? '/collection'
+    router.refresh()
+    router.push(next.startsWith('/') && !next.startsWith('//') ? next : '/collection')
+  }
+
+  if (step === 'code') {
+    return (
+      <Shell>
+        <form onSubmit={verifyCode} className="mt-8 flex flex-col gap-3">
+          <label htmlFor="code" className="text-sm font-medium">
+            Enter the code we emailed to {email}
           </label>
           <input
-            id="email"
-            type="email"
+            id="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
             required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+            autoFocus
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            placeholder="123456"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
           />
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || code.length < 6}
             className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
-            {busy ? 'Sending…' : 'Email me a sign-in link'}
+            {busy ? 'Checking…' : 'Sign in'}
           </button>
           {error && (
             <p role="alert" className="text-sm text-red-600">
               {error}
             </p>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setStep('email')
+              setCode('')
+              setSubmitError(null)
+            }}
+            className="mt-1 text-left text-sm text-neutral-500 underline"
+          >
+            Use a different email
+          </button>
         </form>
-      )}
+      </Shell>
+    )
+  }
+
+  return (
+    <Shell>
+      <form onSubmit={sendCode} className="mt-8 flex flex-col gap-3">
+        <label htmlFor="email" className="text-sm font-medium">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        >
+          {busy ? 'Sending…' : 'Email me a sign-in code'}
+        </button>
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
+      </form>
     </Shell>
   )
 }

@@ -28,14 +28,36 @@ redirect allow-list, or the magic link will bounce.
 
 ## How auth works here
 
-Sign-in is a magic link — no passwords, so no reset flow and no credential
-worth stealing.
+Sign-in is a six-digit emailed **code** — no passwords, so no reset flow and no
+credential worth stealing.
 
-1. `app/login` calls `signInWithOtp`, which emails a link.
-2. The link lands on `app/auth/confirm`, which exchanges the token for a
-   session cookie.
+### Required Supabase configuration ⚠️
+
+**Authentication → Emails → Magic Link** (and **Confirm signup**): the body must
+contain `{{ .Token }}` and must **not** contain `{{ .ConfirmationURL }}`.
+
+A minimal template:
+
+```html
+<h2>Your sign-in code</h2>
+<p>{{ .Token }}</p>
+<p>It expires in an hour.</p>
+```
+
+This is not cosmetic. Corporate mail filters — Microsoft Safe Links, Proofpoint
+URL Defense — pre-fetch every URL in an incoming message. A magic link is a
+single-use token, so the scanner spends it before the recipient clicks, and
+sign-in fails claiming the link is invalid. The link and the code are the *same
+token*, so leaving `{{ .ConfirmationURL }}` in the template breaks the code too,
+and the failure looks exactly like having changed nothing.
+
+1. `app/login` calls `signInWithOtp`, which emails a code.
+2. The user types it; `verifyOtp` exchanges it for a session cookie.
 3. `proxy.ts` refreshes that cookie on every request and redirects signed-out
-   visitors to `/login`. Next.js 16 renamed this file convention from
+   visitors to `/login`.
+
+`app/auth/confirm` still exists for link-style emails (an email-change
+confirmation, say), but nothing routine goes through it any more. Next.js 16 renamed this file convention from
    `middleware` to `proxy` — most Supabase documentation still calls it
    `middleware.ts`, so if you are following a guide, `proxy.ts` is the file it
    means.

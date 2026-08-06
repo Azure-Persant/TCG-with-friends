@@ -28,8 +28,27 @@ redirect allow-list, or the magic link will bounce.
 
 ## How auth works here
 
-Sign-in is a six-digit emailed **code** — no passwords, so no reset flow and no
-credential worth stealing.
+**Google sign-in**, with an emailed six-digit **code** as a fallback. No
+passwords, so no reset flow and no credential worth stealing.
+
+Google is the recommended route because it removes email from the critical
+path: nothing is sent, so nothing can be scanned, rate-limited or filtered.
+
+### Setting up Google sign-in
+
+1. **Google Cloud Console** → create a project → **APIs & Services →
+   Credentials → Create Credentials → OAuth client ID** → *Web application*.
+2. Under **Authorised redirect URIs**, add the callback shown in Supabase →
+   **Authentication → Sign In / Providers → Google**. It looks like
+   `https://YOURREF.supabase.co/auth/v1/callback`. It is Supabase's URL, not
+   your app's — a common thing to get wrong.
+3. Copy the **Client ID** and **Client secret** into that Supabase Google
+   provider page and enable it.
+4. In Supabase → **Authentication → URL Configuration**, make sure your Vercel
+   URL is the Site URL and is in the Redirect URLs list.
+
+The app's own callback is `/auth/callback`, which exchanges the returned code
+for a session cookie.
 
 ### The login screen offers a link *and* a code
 

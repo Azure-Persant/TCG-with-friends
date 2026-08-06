@@ -219,6 +219,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/auth_bridge.sql` | Provisions an account per auth user (31). |
 | `db/apply.mjs` | Applies every file in the one order that works. |
 | `web/` | Next.js app: login, collection, inbox. |
+| `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 

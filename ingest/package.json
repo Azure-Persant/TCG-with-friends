@@ -9,6 +9,7 @@
     "catalog": "tsx src/cli.ts catalog",
     "images": "tsx src/cli.ts images",
     "all": "tsx src/cli.ts all",
+    "summary": "node summary.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

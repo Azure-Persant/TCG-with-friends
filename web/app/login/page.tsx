@@ -7,6 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 const LINK_FAILED =
   'That sign-in link did not work. It may have expired or already been used — request a new code below.'
 
+const OAUTH_FAILED =
+  'Google sign-in did not complete. Try again, or use your email below.'
+
 /**
  * Supabase's gateway answers this when the request path matches no route,
  * which in practice always means NEXT_PUBLIC_SUPABASE_URL is malformed -- a
@@ -26,7 +29,13 @@ function explain(message: string): string {
 }
 
 /**
- * Sign in by email (30).
+ * Sign in with Google, or by email (30).
+ *
+ * Google is offered first and is the recommended path, because it removes
+ * email from the critical path entirely: nothing is sent, so nothing can be
+ * scanned, rate-limited or filtered. The OAuth code travels from Google to the
+ * browser that began the sign-in and is bound to a verifier only that browser
+ * holds -- there is no URL in an inbox for a filter to spend.
  *
  * A CODE, not a link, and that distinction is load-bearing. Corporate mail
  * filters -- Microsoft Safe Links, Proofpoint URL Defense and friends --
@@ -69,7 +78,32 @@ function LoginForm() {
   // Derived during render rather than set in an effect: a value that is a pure
   // function of the URL is not state, and treating it as state means rendering
   // once with the wrong answer.
-  const error = submitError ?? (params.get('error') === 'link' ? LINK_FAILED : null)
+  const urlError = params.get('error')
+  const error =
+    submitError ??
+    (urlError === 'link' ? LINK_FAILED : urlError === 'oauth' ? OAUTH_FAILED : null)
+
+  async function signInWithGoogle() {
+    setBusy(true)
+    setSubmitError(null)
+
+    const supabase = createClient()
+    const next = params.get('next') ?? '/collection'
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    })
+
+    // On success the browser is already navigating to Google, so there is
+    // nothing to do; only a failure to even start comes back here.
+    if (error) {
+      setBusy(false)
+      setSubmitError(error.message)
+    }
+  }
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault()
@@ -184,7 +218,23 @@ function LoginForm() {
 
   return (
     <Shell>
-      <form onSubmit={sendCode} className="mt-8 flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={signInWithGoogle}
+        disabled={busy}
+        className="mt-8 flex w-full items-center justify-center gap-3 rounded-md border border-neutral-300 px-3 py-2.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+      >
+        <GoogleMark />
+        Continue with Google
+      </button>
+
+      <div className="mt-6 flex items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+        <span className="text-xs text-neutral-500">or</span>
+        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+      </div>
+
+      <form onSubmit={sendCode} className="mt-6 flex flex-col gap-3">
         <label htmlFor="email" className="text-sm font-medium">
           Email
         </label>
@@ -212,6 +262,30 @@ function LoginForm() {
         )}
       </form>
     </Shell>
+  )
+}
+
+/** Google's mark, inline: a strict CSP and no external hosts (17). */
+function GoogleMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
   )
 }
 

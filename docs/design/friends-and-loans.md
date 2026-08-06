@@ -402,9 +402,18 @@ coincides with a trade, the cards move through (24) like anything else. The
 `asking_price` column is a number the owner types and the app displays. It is
 never authoritative and nothing computes against it.
 
-### 30. Sign-in is an emailed CODE, and there are no passwords
+### 30. Sign in with Google, or an emailed code — never a password
 
-Supabase Auth, six-digit one-time code, no password field anywhere.
+Supabase Auth. Google is the primary route; an emailed six-digit code is the
+fallback. No password field anywhere.
+
+**Google is preferred because it takes email out of the loop entirely.**
+Nothing is sent, so nothing can be scanned, rate-limited, filtered or
+delivered late. The OAuth code goes straight from Google to the browser that
+began the sign-in, bound to a verifier only that browser holds — there is no
+URL sitting in an inbox for anything to spend. It also sidesteps Supabase's
+built-in email limits, which are a few messages an hour and documented as
+testing-only.
 
 A password would bring a reset flow, strength rules, a hashing decision to get
 right, and a credential worth stealing -- all to protect a list of which friend
@@ -412,9 +421,9 @@ has your cards. A one-time code needs none of that and cannot be reused,
 phished off a sticky note, or shared between two people who "both use the same
 login".
 
-**A code, not a magic link, and the distinction is load-bearing.** This started
-as a magic link, which is the obvious choice and failed immediately in real
-use. Corporate mail filters -- Microsoft Safe Links, Proofpoint URL Defense and
+**The email fallback is a code, not a magic link, and that distinction is
+load-bearing.** This started as a magic link, which is the obvious choice and
+failed immediately in real use. Corporate mail filters -- Microsoft Safe Links, Proofpoint URL Defense and
 the rest -- pre-fetch every URL in an incoming message to check it is safe. A
 magic link is a single-use token, so the scanner spends it before the recipient
 ever clicks, and sign-in fails with an error that blames the user's link. It is
@@ -431,8 +440,13 @@ nothing. Templates are project configuration rather than code, so nothing in
 this repository can enforce that -- it is written down in `web/README.md` and
 that is the only guard it has.
 
-**Cost:** signing in requires reaching your email and typing six digits, which
-is more friction than a link would have been, at a kitchen table mid-game. If
+**Cost of the Google route:** it needs a Google account, and it hands Google
+one more record of where you sign in. For a small group of friends who mostly
+have one already, that is a fair trade against an auth flow that silently
+fails inside managed mailboxes.
+
+**Cost of the email route:** you must reach your inbox and type six digits.
+More friction than a link would have been, at a kitchen table mid-game. If
 that matters, the fix is a longer session, not a password.
 
 ### 31. `account.id` IS `auth.users.id`

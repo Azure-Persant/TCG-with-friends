@@ -26,7 +26,7 @@ function explain(message: string): string {
 }
 
 /**
- * Sign in with an emailed code (30).
+ * Sign in by email (30).
  *
  * A CODE, not a link, and that distinction is load-bearing. Corporate mail
  * filters -- Microsoft Safe Links, Proofpoint URL Defense and friends --
@@ -35,10 +35,15 @@ function explain(message: string): string {
  * clicks, and sign-in fails with no way for either side to tell why. A number
  * typed by hand cannot be consumed by a machine following a URL.
  *
- * This only works if the Supabase email template sends the code and NOT a
- * link. If the template contains {{ .ConfirmationURL }}, a scanner following
- * it burns the same token the code represents, and the code stops working too.
- * See web/README.md.
+ * The catch is that the code path needs a template change, and Supabase only
+ * allows editing templates once custom SMTP is configured. Until then the
+ * stock template sends a link and nothing else. So this screen offers BOTH and
+ * lets whichever the email actually contains be the one that works.
+ *
+ * For a scanned mailbox the link path cannot be rescued: the template must
+ * send {{ .Token }} and must NOT contain {{ .ConfirmationURL }}, because both
+ * are the same token and a scanner following the link spends the code too.
+ * That needs SMTP. See web/README.md.
  */
 export default function LoginPage() {
   // useSearchParams needs a Suspense boundary, because it forces this subtree
@@ -72,10 +77,18 @@ function LoginForm() {
     setSubmitError(null)
 
     const supabase = createClient()
-    // Deliberately no emailRedirectTo. There is no link to redirect to -- the
-    // email carries a code, and adding a link back would reintroduce exactly
-    // the token a scanner can spend.
-    const { error } = await supabase.auth.signInWithOtp({ email })
+
+    // emailRedirectTo is set because the STOCK Supabase template sends only a
+    // link -- editing templates requires custom SMTP, which a new project does
+    // not have. So the email may contain a link, a code, or both depending on
+    // configuration, and the UI below offers both. See web/README.md.
+    const next = params.get('next') ?? '/collection'
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}`,
+      },
+    })
 
     setBusy(false)
     if (error) setSubmitError(explain(error.message))
@@ -121,8 +134,13 @@ function LoginForm() {
     return (
       <Shell>
         <form onSubmit={verifyCode} className="mt-8 flex flex-col gap-3">
-          <label htmlFor="code" className="text-sm font-medium">
-            Enter the code we emailed to {email}
+          <p className="text-sm font-medium">Check your email</p>
+          <p className="-mt-1 text-sm text-neutral-500">
+            We sent a message to <span className="font-medium">{email}</span>. Click the sign-in
+            link in it — or, if it contains a numeric code, type that here instead.
+          </p>
+          <label htmlFor="code" className="mt-2 text-sm font-medium">
+            Sign-in code
           </label>
           <input
             id="code"

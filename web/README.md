@@ -31,10 +31,27 @@ redirect allow-list, or the magic link will bounce.
 Sign-in is a six-digit emailed **code** — no passwords, so no reset flow and no
 credential worth stealing.
 
-### Required Supabase configuration ⚠️
+### The login screen offers a link *and* a code
 
-**Authentication → Emails → Magic Link** (and **Confirm signup**): the body must
-contain `{{ .Token }}` and must **not** contain `{{ .ConfirmationURL }}`.
+Which one actually arrives depends on the email template, and **the template
+cannot be edited until custom SMTP is configured** — Supabase's built-in email
+service always sends its own stock template, which is link-only. So the screen
+accepts either, and whichever the email contains is the one that works.
+
+### If your mailbox scans links ⚠️
+
+Microsoft Safe Links, Proofpoint URL Defense and similar pre-fetch every URL in
+an incoming message. A magic link is a single-use token, so the scanner spends
+it before you click and sign-in fails claiming the link is invalid. **No
+application code can fix this** — any URL that authenticates by being visited
+is a URL a scanner can spend.
+
+The only fix is a code-only email, which means custom SMTP:
+
+1. Set up an SMTP provider under **Project Settings → Authentication → SMTP**.
+2. Then **Authentication → Emails → Magic Link** (and **Confirm signup**)
+   becomes editable. The body must contain `{{ .Token }}` and must **not**
+   contain `{{ .ConfirmationURL }}`.
 
 A minimal template:
 
@@ -44,12 +61,14 @@ A minimal template:
 <p>It expires in an hour.</p>
 ```
 
-This is not cosmetic. Corporate mail filters — Microsoft Safe Links, Proofpoint
-URL Defense — pre-fetch every URL in an incoming message. A magic link is a
-single-use token, so the scanner spends it before the recipient clicks, and
-sign-in fails claiming the link is invalid. The link and the code are the *same
-token*, so leaving `{{ .ConfirmationURL }}` in the template breaks the code too,
-and the failure looks exactly like having changed nothing.
+The link must come out, not merely sit alongside the code: they are two
+representations of the *same token*, so a scanner following the link
+invalidates the code too — and that failure looks identical to having changed
+nothing.
+
+**Custom SMTP is needed before anyone else uses this regardless.** Supabase's
+built-in email service is rate-limited to a handful of messages per hour and is
+documented as being for testing only.
 
 1. `app/login` calls `signInWithOtp`, which emails a code.
 2. The user types it; `verifyOtp` exchanges it for a session cookie.

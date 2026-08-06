@@ -3,9 +3,19 @@ name: Ingest catalog
 # Run by hand from the Actions tab -- there is no schedule, because the Grand
 # Archive catalog only changes when a set releases.
 #
-# This exists so the catalog can be populated WITHOUT a terminal. GitHub's
-# runners can reach both api.gatcg.com and Supabase, so the whole job is a
-# button in the browser.
+# This exists so the catalog can be populated WITHOUT a terminal. A runner can
+# reach both api.gatcg.com and Supabase, so the whole job is a button in the
+# browser.
+#
+# The runner is a per-run choice. A self-hosted runner avoids queueing behind
+# GitHub's hosted capacity, which matters most for the image backfill -- ~6,400
+# polite downloads, comfortably over an hour.
+#
+# SECURITY, if this repository is ever made public: self-hosted runners must
+# not be used by workflows that anyone can trigger. A pull request from a fork
+# would run its own code on your machine. This workflow is workflow_dispatch
+# only, so it cannot be triggered by a fork -- keep it that way, and think
+# twice before putting `self-hosted` on the push/PR-triggered CI workflow.
 #
 # Setup, once: Settings -> Secrets and variables -> Actions -> New repository
 # secret named DATABASE_URL.
@@ -35,11 +45,20 @@ on:
         description: For images only — stop after this many (blank = no limit)
         type: string
         required: false
+      runner:
+        description: Where to run it
+        type: choice
+        default: self-hosted
+        options:
+          - self-hosted
+          - ubuntu-latest
 
 jobs:
   ingest:
-    name: ${{ inputs.command }}
-    runs-on: ubuntu-latest
+    name: ${{ inputs.command }} on ${{ inputs.runner }}
+    # Chosen per run rather than hardcoded: a hardcoded self-hosted job queues
+    # forever if the runner is offline, and the only way out is editing YAML.
+    runs-on: ${{ inputs.runner }}
     # The image backfill is ~6,400 downloads at a deliberately polite rate.
     timeout-minutes: 120
     defaults:
@@ -55,6 +74,9 @@ jobs:
           cache: npm
           cache-dependency-path: ingest/package-lock.json
 
+      # npm ci wipes node_modules first, which matters more on a self-hosted
+      # runner: its workspace persists between runs, so a stale tree would
+      # otherwise survive.
       - run: npm ci
 
       # Fail with an explanation rather than a stack trace from deep inside

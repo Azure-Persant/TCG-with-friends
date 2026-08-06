@@ -8,8 +8,14 @@ name: Ingest catalog
 # button in the browser.
 #
 # Setup, once: Settings -> Secrets and variables -> Actions -> New repository
-# secret, named DATABASE_URL, holding the Supabase connection string from
-# Project Settings -> Database -> Connection string -> URI (direct, port 5432).
+# secret named DATABASE_URL.
+#
+# Its value: Supabase dashboard -> green "Connect" button -> Session pooler.
+#
+# SESSION pooler specifically. Not Transaction pooler (6543), which does not
+# keep a session between statements. And not Direct connection, which is
+# IPv6-only without the paid IPv4 add-on -- GitHub runners are IPv4-only, so a
+# direct URL times out here with nothing useful in the log.
 #
 # That secret can write anything in the database, so it is a repository secret
 # rather than anything committed, and it never appears in a log.
@@ -60,13 +66,13 @@ jobs:
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::DATABASE_URL secret is not set."
             echo "Add it under Settings -> Secrets and variables -> Actions."
-            echo "Value: Supabase -> Project Settings -> Database -> Connection string -> URI."
+            echo "Value: Supabase dashboard -> Connect button -> Session pooler."
             exit 1
           fi
           case "$DATABASE_URL" in
             *:6543/*)
               echo "::error::That is the transaction pooler (port 6543)."
-              echo "Use the direct connection on 5432 — the ingest needs a real session."
+              echo "Use the Session pooler on 5432 — the ingest needs a real session."
               exit 1 ;;
           esac
 

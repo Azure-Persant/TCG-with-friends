@@ -14,12 +14,15 @@ npm run dev
 
 ```bash
 cd ../db && npm install
-npm run apply -- --url "postgresql://postgres:PASSWORD@db.YOURREF.supabase.co:5432/postgres"
+npm run apply -- --url "postgresql://postgres.YOURREF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
 ```
 
-Connection string: Supabase dashboard → **Project Settings → Database →
-Connection string → URI**. Use the **direct** connection on port 5432, not the
-transaction pooler on 6543.
+Connection string: Supabase dashboard → green **Connect** button → **Session
+pooler** (port 5432). Not Transaction pooler (6543), which does not hold a
+session between statements.
+
+If you have no terminal, paste `../db/dist/supabase-setup.sql` into the
+Supabase SQL editor instead — same result, no connection string needed.
 
 See `../db/README.md` for what it applies and why the order matters.
 

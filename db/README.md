@@ -66,11 +66,20 @@ failures worth a round-trip to rule out:
 
 ### Getting the connection string
 
-Supabase dashboard → **Project Settings → Database → Connection string → URI**.
+Supabase dashboard → the green **Connect** button at the top → **Session
+pooler**.
 
-Use the **direct connection on port 5432**, not the transaction pooler on 6543.
-The pooler does not hold a session between statements, and these scripts need
-one. The script refuses a 6543 URL rather than half-applying against it.
+Two traps:
+
+- **Not Transaction pooler (6543).** Transaction mode does not keep a session
+  between statements; these scripts need one. `apply.mjs` refuses a 6543 URL
+  rather than half-applying against it.
+- **Session pooler rather than Direct connection**, if anything but your own
+  machine will use it. Supabase's direct connection is IPv6-only unless you buy
+  the IPv4 add-on, and GitHub Actions runners are IPv4-only — a direct URL just
+  times out there. Both are port 5432; the session pooler host looks like
+  `aws-0-<region>.pooler.supabase.com` and its username is
+  `postgres.<yourprojectref>`.
 
 ## The files, in the order they must be applied
 

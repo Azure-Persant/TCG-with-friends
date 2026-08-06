@@ -32,6 +32,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/collection" className="font-medium hover:underline">
             Collection
           </Link>
+          <Link href="/add" className="font-medium hover:underline">
+            Add cards
+          </Link>
+          <Link href="/locations" className="font-medium hover:underline">
+            Boxes
+          </Link>
           <Link href="/inbox" className="font-medium hover:underline">
             Inbox
             {pending ? (

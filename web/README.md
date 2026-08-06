@@ -154,11 +154,23 @@ you want magic links to work on previews.
 `emailRedirectTo` is built from `window.location.origin` rather than a
 hardcoded URL, so localhost, previews and production all work off one build.
 
+## Trying it before the catalog import
+
+The Ingest catalog workflow fills the catalog from api.gatcg.com. Until it has
+run there is nothing to search for, so `/add` will find nothing.
+
+To try the UI now, paste `../db/sample_cards.sql` into the Supabase SQL editor.
+It adds four obviously-fake cards in a set called "Sample Set (placeholder
+data)" — deliberately not real card names, so nothing is mistaken for imported
+catalog data. The file ends with the SQL to remove them again.
+
 ## What exists
 
 - `/login` — magic-link sign in
 - `/collection` — your holdings, grouped by where they are, with lent-out cards
   flagged
+- `/add` — search the catalog and put copies in a box
+- `/locations` — name the boxes you keep cards in
 - `/inbox` — pending requests of all five kinds, accept or decline
 
 Mutations go through the `app_*` RPCs. Nothing writes to a table directly,

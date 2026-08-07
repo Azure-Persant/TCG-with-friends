@@ -220,6 +220,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/apply.mjs` | Applies every file in the one order that works. |
 | `web/` | Next.js app: login, collection, inbox. |
 | `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
+| `.claude/skills/` | Matt Pocock's skills, installed as editable copies. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
@@ -316,6 +317,11 @@ else about the card is the lender's.
    `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
    `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
    so this is UI over a tested backend.
+**Open work is tracked as GitHub issues** (#10–#16), not in this file: catalog
+import, per-card borrow origins, verifying email sign-in, custom SMTP,
+migrations, removing the sample cards, and card images. This file explains the
+project; the issues track what is left.
+
 4. **Notifications** — the largest remaining gap, and (23) has changed its shape
    for the better: there is now exactly one table to watch and one place to
    emit from, rather than five. Every flow assumes something tells the other

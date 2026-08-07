@@ -32,47 +32,45 @@ jobs:
       # Any failed statement fails the job. Without this psql reports the
       # error and exits 0, so a broken schema would look like a green build.
       PSQL: psql -v ON_ERROR_STOP=1 -q
+      # apply.mjs takes a connection string, not the PG* variables psql uses.
+      DATABASE_URL: postgresql://dev:dev@localhost:5432/fci
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: db/package-lock.json
+
+      # For the idempotency check below, which re-applies one file rather than
+      # the whole sequence.
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      # auth_shim stands in for Supabase's auth.uid() and creates the
-      # unprivileged app_user role. It is local/CI only -- never loaded on
-      # Supabase, where the real auth schema exists.
-      - name: Apply schema
-        run: $PSQL -f db/schema.sql
+      - name: Install db tooling
+        working-directory: db
+        run: npm ci
 
-      - name: Apply local auth shim
-        run: $PSQL -f db/local/auth_shim.sql
-
-      - name: Apply RLS policies
-        run: $PSQL -f db/policies.sql
-
-      - name: Apply mutation functions
-        run: $PSQL -f db/functions.sql
-
-      - name: Schema + loan lifecycle tests
-        run: $PSQL -f db/tests/schema_smoke.sql
-
-      - name: Row Level Security tests
-        run: $PSQL -f db/tests/rls_smoke.sql
-
-      - name: Mutation RPC tests
-        run: $PSQL -f db/tests/rpc_smoke.sql
-
-      - name: Request, trade and listing tests
-        run: $PSQL -f db/tests/request_smoke.sql
-
-      - name: Auth bridge tests
-        run: $PSQL -f db/tests/auth_smoke.sql
+      # One command, because db/apply.mjs already owns the apply order and the
+      # test list. CI used to repeat both as hardcoded steps, which is how
+      # db/auth_bridge.sql came to be applied locally but not here: the file was
+      # added to apply.mjs and the CI copy was never updated, so auth_smoke.sql
+      # ran against a database with no signup trigger and failed with an
+      # assertion that named the symptom rather than the cause.
+      #
+      # --local adds the auth shim, which stands in for Supabase's auth.uid()
+      # and auth.users, and creates the unprivileged app_user role the tests
+      # need for RLS assertions to mean anything.
+      - name: Apply everything and run the suites
+        working-directory: db
+        run: node apply.mjs --local --tests
 
       # functions.sql is all CREATE OR REPLACE, so re-applying it to a live
-      # database must be safe -- that is how it will be deployed. (policies.sql
-      # is NOT idempotent: CREATE POLICY has no IF NOT EXISTS, so it is not
-      # re-run here.)
+      # database must be safe -- that is how it will be deployed. (schema.sql
+      # and policies.sql are NOT idempotent: they build from empty and
+      # CREATE POLICY has no IF NOT EXISTS, so neither is re-run here.)
       - name: Re-apply functions and re-test (idempotency)
         run: |
           $PSQL -f db/functions.sql
@@ -88,9 +86,9 @@ jobs:
         working-directory: ingest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -107,9 +105,9 @@ jobs:
         working-directory: web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm

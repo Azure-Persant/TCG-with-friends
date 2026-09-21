@@ -471,6 +471,45 @@ who has your cards goes with it. An orphaned account row is the intended
 outcome, because the person still owed cards needs the history more than the
 database needs tidiness.
 
+### 32. Schema changes are migrations, tracked by the Supabase CLI
+
+`db/schema.sql` builds from empty and cannot be re-run over itself (24 became
+irrelevant to that fact -- it is about the app, this is about the database
+that runs it). That was fine while no one but the builder had put cards in.
+It stops being fine the moment a second account exists, because from then on
+every schema change risks someone's inventory.
+
+**Chosen: the Supabase CLI's own migrations** (`supabase/migrations/`,
+timestamped files, tracked in `supabase_migrations.schema_migrations` on the
+target database) rather than a bespoke tool. It is the mechanism Supabase
+itself expects `db push` and the dashboard's migration view to agree with, so
+adopting anything else means fighting the platform instead of using it.
+
+**The existing schema became one baseline migration**, not a fresh start: `db
+push` refuses to touch a database it has no record of, so the very first
+migration is the entire prior state -- `schema.sql`, `auth_bridge.sql`,
+`policies.sql` and `functions.sql`, concatenated in the order (31) and the
+rest of this document already depend on. A database that already has this
+schema (the live project) accepts the baseline as already-applied via
+`supabase migration repair <version> --status applied` rather than re-running
+DDL that would just fail on "already exists."
+
+**`db/schema.sql` and friends did not go away.** They stay the fast path for
+an ephemeral local or CI database that is created and dropped inside one test
+run -- migration bookkeeping buys nothing there. What changed is the rule for
+anyone editing them: a schema change is now two edits, not one -- the file as
+before, *and* a new file under `supabase/migrations/` carrying just the diff.
+Nothing enforces that pairing yet beyond a CI step that rebuilds both ways and
+diffs the result.
+
+**`db/apply.mjs`'s remote mode was retired**, not kept: it applied
+`schema.sql` straight to whatever `--url` pointed at, which is exactly the
+unmigrated write this decision exists to stop. `--emit` (`db/dist/supabase-
+setup.sql`, the one-paste SQL-editor file) went with it, for the same reason
+-- a bundle pasted by hand records nothing in `schema_migrations`, so the next
+`db push` would try to re-run it and fail. Local development and CI keep using
+`apply.mjs --local`, which never touches a database anyone depends on.
+
 ## Open questions
 
 None. The image-mirroring question was resolved by precedent —

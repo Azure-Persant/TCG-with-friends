@@ -217,7 +217,8 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
 | `db/auth_bridge.sql` | Provisions an account per auth user (31). |
-| `db/apply.mjs` | Applies every file in the one order that works. |
+| `db/apply.mjs` | Builds a throwaway local/CI database from the files above. |
+| `supabase/migrations/` | The deployable history. Applied to the live project with `supabase db push` (32). |
 | `web/` | Next.js app: login, collection, inbox. |
 | `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
 | `.claude/skills/` | Matt Pocock's skills, installed as editable copies. |
@@ -317,10 +318,10 @@ else about the card is the lender's.
    `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
    `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
    so this is UI over a tested backend.
-**Open work is tracked as GitHub issues** (#10–#16), not in this file: catalog
-import, per-card borrow origins, verifying email sign-in, custom SMTP,
-migrations, removing the sample cards, and card images. This file explains the
-project; the issues track what is left.
+**Open work is tracked as GitHub issues**, not in this file: catalog import,
+per-card borrow origins, verifying email sign-in, custom SMTP, removing the
+sample cards, and card images. This file explains the project; the issues
+track what is left.
 
 4. **Notifications** — the largest remaining gap, and (23) has changed its shape
    for the better: there is now exactly one table to watch and one place to

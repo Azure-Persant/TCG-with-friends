@@ -9,8 +9,9 @@ and why it looks the way it does.
 | | |
 |---|---|
 | [`HANDOFF.md`](./HANDOFF.md) | Orientation. Read this first. |
-| [`docs/design/friends-and-loans.md`](./docs/design/friends-and-loans.md) | All 22 design decisions with rationale. |
+| [`docs/design/friends-and-loans.md`](./docs/design/friends-and-loans.md) | All 32 design decisions with rationale. |
 | [`db/`](./db) | PostgreSQL schema, RLS policies, and tests. |
+| [`supabase/migrations/`](./supabase/migrations) | Schema history, applied to the live project with the Supabase CLI. |
 | [`ingest/`](./ingest) | Grand Archive catalog and image worker. |
 
 Status: design settled, database built and tested, catalog ingest working. No

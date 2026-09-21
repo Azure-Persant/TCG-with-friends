@@ -34,4 +34,6 @@ the anon key reaches PostgREST directly, so any rule enforced only in this app
 is a rule anyone holding that key can skip.
 
 If a mutation needs new behaviour, it changes in `functions.sql` and gets a
-test in `../db/tests/`. Not here.
+test in `../db/tests/`. Not here. If that change touches the schema (a new
+column, table, or anything else DDL), it also needs a file under
+`../supabase/migrations/` — see `../db/README.md`, "Changing the schema" (32).

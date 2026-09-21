@@ -78,6 +78,27 @@ jobs:
           $PSQL -f db/tests/request_smoke.sql
           $PSQL -f db/tests/auth_smoke.sql
 
+      # Schema changes are now a two-file edit: db/schema.sql (and friends)
+      # for the fast local/CI rebuild above, plus a supabase/migrations/ file
+      # for the live project (see db/README.md, "Changing the schema"). Only
+      # a human keeps those in sync -- this rebuilds the schema the second
+      # way, into a second database, and diffs the two so drift fails the
+      # build instead of surfacing as a broken `supabase db push` later.
+      - name: Migrations match the schema files (drift guard)
+        run: |
+          createdb -h localhost -U dev fci_migrations
+          PGDATABASE=fci_migrations $PSQL -f db/local/auth_shim.sql
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            PGDATABASE=fci_migrations $PSQL -f "$f"
+          done
+          # \restrict/\unrestrict carry a random per-dump token, not schema
+          # content -- excluded so they don't manufacture a false diff.
+          pg_dump --schema-only --no-owner --no-privileges -h localhost -U dev fci \
+            | grep -v -E '^\\(un)?restrict ' > /tmp/from-schema-files.sql
+          pg_dump --schema-only --no-owner --no-privileges -h localhost -U dev fci_migrations \
+            | grep -v -E '^\\(un)?restrict ' > /tmp/from-migrations.sql
+          diff /tmp/from-schema-files.sql /tmp/from-migrations.sql
+
   ingest:
     name: Ingest worker
     runs-on: ubuntu-latest

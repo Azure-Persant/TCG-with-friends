@@ -3,9 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Applies the database files, in order, to any Postgres.",
+  "description": "Builds a throwaway local/CI database from the schema files.",
   "scripts": {
-    "apply": "node apply.mjs",
     "apply:local": "node apply.mjs --local",
     "test": "node apply.mjs --local --tests"
   },

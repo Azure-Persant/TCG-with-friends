@@ -10,28 +10,15 @@ holding that key can skip.
 
 ## Applying it
 
-### No terminal? Use the browser
+**Local development and CI** build from empty with `apply.mjs`, below. **Any
+database that holds data that matters** — which today means the live Supabase
+project — goes through `supabase/migrations/` instead. See "Changing the
+schema" further down; don't point `apply.mjs` at it.
 
-`dist/supabase-setup.sql` is every file below concatenated in the right order,
-minus the local shim. Open it on GitHub, copy the raw contents, paste into the
-Supabase **SQL Editor**, press Run. It ends with a verification query, so the
-results pane tells you whether it worked instead of leaving you to guess.
-
-Regenerate it after any schema change:
-
-```bash
-node apply.mjs --emit dist/supabase-setup.sql
-```
-
-It is a **generated file** — edit the sources, never `dist/`.
-
-### With a terminal
+### Local development and CI
 
 ```bash
 npm install
-
-# Supabase (or any remote Postgres)
-npm run apply -- --url "postgresql://postgres:PASSWORD@db.YOURREF.supabase.co:5432/postgres"
 
 # Local development — adds the auth shim
 npm run apply:local -- --url "postgresql://localhost/fci"
@@ -40,13 +27,16 @@ npm run apply:local -- --url "postgresql://localhost/fci"
 npm test -- --url "postgresql://localhost/fci"
 
 # Show the plan without changing anything
-npm run apply -- --url "..." --dry-run
+npm run apply:local -- --url "..." --dry-run
 
 # Verify an existing install without changing anything
-npm run apply -- --url "..." --check
+npm run apply:local -- --url "..." --check
 ```
 
-Applying always ends with the `--check` pass, so you get a verdict rather than
+`apply.mjs` refuses to run without `--local`, and refuses a `supabase.com`
+host even with it — see "Changing the schema."
+
+Applying always ends with a `--check` pass, so you get a verdict rather than
 a guess. Every check corresponds to a way this can fail **silently** — an app
 where everything is empty, or everything is visible — because those are the
 failures worth a round-trip to rule out:
@@ -63,23 +53,6 @@ failures worth a round-trip to rule out:
   back empty with no error at all
 
 `$DATABASE_URL` is used when `--url` is omitted.
-
-### Getting the connection string
-
-Supabase dashboard → the green **Connect** button at the top → **Session
-pooler**.
-
-Two traps:
-
-- **Not Transaction pooler (6543).** Transaction mode does not keep a session
-  between statements; these scripts need one. `apply.mjs` refuses a 6543 URL
-  rather than half-applying against it.
-- **Session pooler rather than Direct connection**, if anything but your own
-  machine will use it. Supabase's direct connection is IPv6-only unless you buy
-  the IPv4 add-on, and GitHub Actions runners are IPv4-only — a direct URL just
-  times out there. Both are port 5432; the session pooler host looks like
-  `aws-0-<region>.pooler.supabase.com` and its username is
-  `postgres.<yourprojectref>`.
 
 ## The files, in the order they must be applied
 
@@ -104,13 +77,61 @@ nobody. `apply.mjs` refuses to do it.
 
 ## Changing the schema
 
-There is no migration system yet, because there is no data worth preserving
-yet. Changing the schema means dropping the database and re-applying.
+Migrations, tracked by the Supabase CLI — see decision 32 in
+`docs/design/friends-and-loans.md` for why. The live Supabase project is a
+database that holds real accounts now, so `apply.mjs` and dropping/re-applying
+are no longer options for it.
 
-When real data exists, that stops being acceptable and this needs proper
-migrations — most likely the Supabase CLI's, which timestamps files in
-`supabase/migrations/` and tracks what has been applied. Worth doing **before**
-the first person other than you puts cards in.
+A schema change is two edits, not one:
+
+1. Edit the file as always (`schema.sql`, `functions.sql`, `policies.sql` or
+   `auth_bridge.sql`) — this stays the fast, from-empty path local dev and CI
+   build against.
+2. Add a migration carrying just the diff:
+
+   ```bash
+   npx supabase migration new <short_description>
+   # write the ALTER/CREATE/DROP statements into the file it created
+   ```
+
+Nothing enforces that pairing beyond eyes on the PR — that's the main risk to
+watch for.
+
+To apply pending migrations to the real project:
+
+```bash
+npx supabase db push --db-url "postgresql://postgres.<ref>:PASSWORD@aws-0-<region>.pooler.supabase.com:5432/postgres"
+```
+
+Get that URL from the Supabase dashboard's green **Connect** button → **Session
+pooler**. Two traps, same as ever:
+
+- **Not Transaction pooler (6543).** Transaction mode does not keep a session
+  between statements, which the CLI needs for the migration lock.
+- **Session pooler rather than Direct connection**, unless only your own
+  machine will ever use it. Supabase's direct connection is IPv6-only without
+  the paid IPv4 add-on, and GitHub Actions runners are IPv4-only.
+
+`supabase/migrations/` starts with one **baseline migration**: `schema.sql`,
+`auth_bridge.sql`, `policies.sql` and `functions.sql`, concatenated in the
+order above, as of the day migrations were adopted. The live project already
+had this schema before that day, so pushing the baseline to it would fail on
+"already exists." Mark it applied without re-running it, once, per project:
+
+```bash
+npx supabase migration repair 20260921034122 --status applied --db-url "postgresql://..."
+```
+
+After that, `supabase db push` only ever applies migrations the target
+doesn't have yet — safe to run again, and safe to run against a database that
+has data in it.
+
+**Retired rather than kept:** `apply.mjs`'s old remote mode (it applied
+`schema.sql` straight to whatever `--url` pointed at — exactly the unmigrated
+write this section replaces) and `--emit`/`dist/supabase-setup.sql` (a
+one-paste SQL-editor bundle can't record itself in the migrations table, so
+`db push` would try to re-run it next time and fail). `apply.mjs` now refuses
+anything that isn't `--local`.
 
 ## Tests
 

@@ -1,13 +1,23 @@
 #!/usr/bin/env node
 //
-// Applies the database files, in the one order that works, to any Postgres.
+// Builds an EMPTY database from db/schema.sql and friends. Local dev and CI
+// only -- this is where "build from empty" is safe, because the database is
+// created and dropped inside one run.
 //
-//   node db/apply.mjs --url "postgresql://..."      # Supabase
-//   node db/apply.mjs --url "..." --local           # local dev (adds the shim)
-//   node db/apply.mjs --url "..." --local --tests   # ...and run the suites
-//   node db/apply.mjs --url "..." --dry-run         # just show the plan
+//   node db/apply.mjs --local --url "postgresql://localhost/fci"
+//   node db/apply.mjs --local --tests --url "..."   # ...and run the suites
+//   node db/apply.mjs --local --dry-run              # just show the plan
+//   node db/apply.mjs --local --check --url "..."    # verify an install
 //
 // DATABASE_URL is used if --url is omitted.
+//
+// Any database with data that matters -- which today means the live Supabase
+// project -- goes through `supabase/migrations/` and `supabase db push`
+// instead (see db/README.md and decision 32 in
+// docs/design/friends-and-loans.md). This script refuses a non-local target:
+// applying schema.sql straight to a database is exactly the unmigrated write
+// that exists to prevent, and it would also fail outright the moment that
+// database already has the schema, migrated or not.
 //
 // WHY THIS EXISTS
 //
@@ -20,9 +30,10 @@
 // It also stops one specific mistake. db/local/auth_shim.sql fakes auth.uid()
 // and auth.users for local testing. Applying it to Supabase would shadow the
 // real ones, and every user would resolve to nobody. It is opt-in behind
-// --local, and refuses to run against a supabase.com host at all.
+// --local, and refuses to run against a supabase.com host at all -- which is
+// now also enforced by requiring --local unconditionally, below.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import pg from 'pg'
@@ -46,82 +57,6 @@ const TEST_FILES = [
   'tests/auth_smoke.sql',
 ]
 
-/** The verification pass, as plain SQL, for the Supabase editor. */
-const VERIFY_SQL = `
-WITH t AS (
-  SELECT c.relname, c.relrowsecurity,
-         (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE n.nspname = 'public' AND c.relkind = 'r'
-)
-SELECT * FROM (
-  SELECT 1 AS n, 'tables present' AS check_name,
-         CASE WHEN count(*) = 23 THEN 'PASS' ELSE 'FAIL' END AS result,
-         count(*) || ' of 23' AS detail
-    FROM t
-
-  UNION ALL
-  SELECT 2, 'row level security on every table',
-         CASE WHEN count(*) FILTER (WHERE NOT relrowsecurity) = 0 THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(relname, ', ') FILTER (WHERE NOT relrowsecurity),
-                  'all protected')
-    FROM t
-
-  UNION ALL
-  -- RLS on with no policy denies everything. Intended for catalog_sync_run,
-  -- a bug anywhere else -- it shows up as a permanently empty screen.
-  SELECT 3, 'every user-facing table has a policy',
-         CASE WHEN count(*) FILTER (
-                WHERE policies = 0 AND relname <> 'catalog_sync_run') = 0
-              THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(relname, ', ') FILTER (
-                    WHERE policies = 0 AND relname <> 'catalog_sync_run'),
-                  'all readable')
-    FROM t
-
-  UNION ALL
-  SELECT 4, 'operational tables stay closed',
-         CASE WHEN count(*) FILTER (
-                WHERE policies > 0 AND relname = 'catalog_sync_run') = 0
-              THEN 'PASS' ELSE 'FAIL' END,
-         'catalog_sync_run is service-role only'
-    FROM t
-
-  UNION ALL
-  SELECT 5, 'mutation functions installed',
-         CASE WHEN count(*) >= 30 THEN 'PASS' ELSE 'FAIL' END,
-         count(*) || ' app_* functions'
-    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-   WHERE n.nspname = 'public' AND p.proname LIKE 'app\\_%'
-
-  UNION ALL
-  -- citext lives in the extensions schema on Supabase, not public.
-  SELECT 6, 'citext operators resolve',
-         CASE WHEN ('A'::citext = 'a'::citext) THEN 'PASS' ELSE 'FAIL' END,
-         'case-insensitive email comparison'
-
-  UNION ALL
-  SELECT 7, 'signup creates an account',
-         CASE WHEN count(*) FILTER (WHERE tgname = 'on_auth_user_created') = 1
-              THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(tgname, ', '), 'NO TRIGGER on auth.users')
-    FROM pg_trigger
-   WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal
-
-  UNION ALL
-  -- The one that matters most. If these ids do not line up, auth.uid() matches
-  -- nothing and every page in the app is empty, with no error anywhere.
-  SELECT 8, 'every signed-up user has an account row',
-         CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
-         CASE WHEN count(*) = 0 THEN 'ids line up'
-              ELSE count(*) || ' auth user(s) with no account' END
-    FROM auth.users u
-   WHERE u.email IS NOT NULL
-     AND NOT EXISTS (SELECT 1 FROM public.account a WHERE a.id = u.id)
-) checks
-ORDER BY n;
-`
-
 function parseArgs(argv) {
   const args = {
     url: process.env.DATABASE_URL,
@@ -137,7 +72,6 @@ function parseArgs(argv) {
     else if (a === '--tests') args.tests = true
     else if (a === '--dry-run') args.dryRun = true
     else if (a === '--check') args.check = true
-    else if (a === '--emit') args.emit = argv[++i]
     else if (a === '--help' || a === '-h') args.help = true
     else {
       console.error(`Unknown argument: ${a}`)
@@ -148,21 +82,18 @@ function parseArgs(argv) {
 }
 
 const USAGE = `
-Apply the database files in order.
+Build an empty local/CI database from the schema files. --local is required.
 
-  node db/apply.mjs --url "postgresql://..."     Supabase or any Postgres
-  node db/apply.mjs --local                      add the local auth shim
-  node db/apply.mjs --local --tests              ...and run the test suites
-  node db/apply.mjs --dry-run                    show the plan, change nothing
-  node db/apply.mjs --check                      verify an install, change nothing
-  node db/apply.mjs --emit dist/setup.sql        write one paste-able file
+  node db/apply.mjs --local --url "postgresql://localhost/fci"
+  node db/apply.mjs --local --tests               ...and run the test suites
+  node db/apply.mjs --local --dry-run             show the plan, change nothing
+  node db/apply.mjs --local --check               verify an install, change nothing
 
 Falls back to $DATABASE_URL when --url is omitted.
 
-Get the Supabase URL from the dashboard's green "Connect" button.
-Use SESSION pooler (port 5432), not Transaction pooler (6543): transaction mode
-does not keep a session between statements and these scripts need one.
-Direct connection also works, but is IPv6-only without the paid IPv4 add-on.
+Anything that isn't a throwaway local/CI database -- which today means the
+live Supabase project -- goes through supabase/migrations/ and
+"supabase db push" instead. See db/README.md.
 `
 
 function plan(args) {
@@ -209,7 +140,7 @@ async function runFile(client, relPath, label) {
  * just an app where everything is empty or everything is visible. Those are
  * the failures worth spending a round-trip to rule out.
  */
-async function verify(client, { isSupabase }) {
+async function verify(client) {
   const checks = []
   const add = (ok, label, detail) => checks.push({ ok, label, detail })
 
@@ -301,70 +232,7 @@ async function verify(client, { isSupabase }) {
     console.log(`  ${mark}  ${c.label}${c.detail ? ` -- ${c.detail}` : ''}`)
   }
 
-  if (!failed && isSupabase) {
-    console.log('\nLooks good. Sign in through the app and confirm an account row appears.')
-  }
   return failed
-}
-
-/**
- * Write every file into one, in order, for pasting into the Supabase SQL
- * editor.
- *
- * This exists because the SQL editor is the only route that needs no terminal,
- * no Node and no clone -- and pasting five files by hand in the right order is
- * exactly the mistake this whole script was written to prevent. One file, one
- * paste, no order to get wrong.
- */
-function emit(target) {
-  const parts = [
-    `-- ===========================================================================`,
-    `-- Friends Card Inventory -- complete Supabase setup`,
-    `--`,
-    `-- GENERATED FILE. Do not edit. Regenerate with:`,
-    `--   node db/apply.mjs --emit dist/supabase-setup.sql`,
-    `--`,
-    `-- Paste the whole thing into the Supabase SQL editor and press Run. It is`,
-    `-- every file in db/ concatenated in the one order that works, minus the`,
-    `-- local auth shim, which must never reach Supabase.`,
-    `--`,
-    `-- Runs on an EMPTY database. It creates tables and policies, so re-running`,
-    `-- it over itself will fail on the first thing that already exists.`,
-    `-- ===========================================================================`,
-    ``,
-  ]
-
-  for (const [file, label] of SCHEMA_FILES.filter(([, , o]) => !o?.localOnly)) {
-    parts.push(
-      ``,
-      `-- ===========================================================================`,
-      `-- ${file} -- ${label}`,
-      `-- ===========================================================================`,
-      ``,
-      readFileSync(join(HERE, file), 'utf8').trimEnd(),
-      ``,
-    )
-  }
-
-  parts.push(
-    ``,
-    `-- ===========================================================================`,
-    `-- Did it work?`,
-    `--`,
-    `-- The results pane below should show every row saying PASS. Anything else`,
-    `-- means the database is applied but not right -- send it back rather than`,
-    `-- carrying on.`,
-    `-- ===========================================================================`,
-    ``,
-    VERIFY_SQL.trim(),
-    ``,
-  )
-
-  const out = parts.join('\n')
-  mkdirSync(dirname(join(HERE, target)), { recursive: true })
-  writeFileSync(join(HERE, target), out)
-  console.log(`Wrote db/${target} (${out.split('\n').length} lines)`)
-  return 0
 }
 
 async function main() {
@@ -375,41 +243,34 @@ async function main() {
     return 0
   }
 
-  if (args.emit) return emit(args.emit)
-
   if (!args.url) {
     console.error('No connection string. Pass --url "postgresql://..." or set DATABASE_URL.')
     console.error(USAGE)
     return 2
   }
 
-  const isSupabase = /supabase\.(co|com|net)/.test(args.url)
+  // This script only builds from empty, which is only ever safe on a
+  // throwaway database. Anything else goes through supabase/migrations/ and
+  // "supabase db push" -- see db/README.md and decision 32 in
+  // docs/design/friends-and-loans.md.
+  if (!args.local) {
+    console.error('This script is local/CI only now -- pass --local.')
+    console.error('For a real database (the live Supabase project), use "supabase db push"')
+    console.error('against supabase/migrations/ instead. See db/README.md.')
+    return 2
+  }
 
   // The one mistake worth making impossible rather than merely documenting.
-  if (isSupabase && args.local) {
+  if (/supabase\.(co|com|net)/.test(args.url)) {
     console.error('Refusing to apply the local auth shim to Supabase.')
     console.error('It would shadow the real auth.uid(), and every user would resolve to nobody.')
-    return 2
-  }
-
-  if (isSupabase && /:6543\//.test(args.url)) {
-    console.error('That looks like the Transaction pooler (port 6543).')
-    console.error('Use the Session pooler on port 5432 -- these scripts need a real session.')
-    return 2
-  }
-
-  // The suites create an app_user role and forge JWT claims; against real
-  // Supabase they would fail for reasons that have nothing to do with the
-  // code under test.
-  if (args.tests && !args.local) {
-    console.error('--tests needs --local. The suites depend on the local auth shim.')
     return 2
   }
 
   const files = plan(args)
 
   console.log(`\nTarget: ${args.url.replace(/:[^:@/]+@/, ':****@')}`)
-  console.log(`Mode:   ${args.local ? 'local (with auth shim)' : 'remote (real Supabase auth)'}\n`)
+  console.log(`Mode:   local (with auth shim)\n`)
 
   if (args.dryRun) {
     console.log('Would apply, in this order:')
@@ -422,11 +283,7 @@ async function main() {
     return 0
   }
 
-  const client = new pg.Client({
-    connectionString: args.url,
-    // Supabase terminates TLS with its own CA; node-postgres does not ship it.
-    ssl: isSupabase ? { rejectUnauthorized: false } : undefined,
-  })
+  const client = new pg.Client({ connectionString: args.url })
 
   try {
     await client.connect()
@@ -436,7 +293,7 @@ async function main() {
   }
 
   if (args.check) {
-    const failed = await verify(client, { isSupabase })
+    const failed = await verify(client)
     await client.end()
     console.log('')
     return failed ? 1 : 0
@@ -473,14 +330,7 @@ async function main() {
   }
 
   console.log('')
-  const failed = await verify(client, { isSupabase })
-
-  if (isSupabase) {
-    // PostgREST caches the schema. Without this the new RPCs 404 for a while
-    // after applying, which reads exactly like "the functions did not install".
-    await client.query(`NOTIFY pgrst, 'reload schema'`)
-    console.log('\nAsked PostgREST to reload its schema cache.')
-  }
+  const failed = await verify(client)
 
   await client.end()
   if (failed) {

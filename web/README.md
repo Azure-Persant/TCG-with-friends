@@ -12,19 +12,16 @@ npm run dev
 
 ## Setting up the database side
 
+The live project's schema is applied through migrations now, not a direct
+apply — see `../db/README.md`, "Changing the schema":
+
 ```bash
-cd ../db && npm install
-npm run apply -- --url "postgresql://postgres.YOURREF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
+npx supabase db push --db-url "postgresql://postgres.YOURREF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
 ```
 
 Connection string: Supabase dashboard → green **Connect** button → **Session
 pooler** (port 5432). Not Transaction pooler (6543), which does not hold a
 session between statements.
-
-If you have no terminal, paste `../db/dist/supabase-setup.sql` into the
-Supabase SQL editor instead — same result, no connection string needed.
-
-See `../db/README.md` for what it applies and why the order matters.
 
 In **Authentication → URL Configuration**, add `http://localhost:3000/**` to the
 redirect allow-list, or the magic link will bounce.

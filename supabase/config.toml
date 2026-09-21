@@ -1,0 +1,10 @@
+# Config for the Supabase CLI, used only for migrations (`supabase migration
+# new`, `supabase db push`). This project has no local Supabase stack --
+# db/apply.mjs plus db/local/auth_shim.sql fill that role -- so every section
+# for auth, storage, edge functions and the local API is omitted rather than
+# left as dead boilerplate nobody reads.
+project_id = "friends-card-inventory"
+
+[db]
+# Must match the Postgres major version schema.sql targets (see db/README.md).
+major_version = 17

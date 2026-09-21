@@ -1,22 +1,12 @@
--- ===========================================================================
--- Friends Card Inventory -- complete Supabase setup
---
--- GENERATED FILE. Do not edit. Regenerate with:
---   node db/apply.mjs --emit dist/supabase-setup.sql
---
--- Paste the whole thing into the Supabase SQL editor and press Run. It is
--- every file in db/ concatenated in the one order that works, minus the
--- local auth shim, which must never reach Supabase.
---
--- Runs on an EMPTY database. It creates tables and policies, so re-running
--- it over itself will fail on the first thing that already exists.
--- ===========================================================================
+-- Baseline migration: everything that existed before this project adopted
+-- migrations (issue #14). Captures schema.sql, auth_bridge.sql, policies.sql
+-- and functions.sql, concatenated in the one order apply.mjs used to apply
+-- them directly. Never edit this file -- it is the historical starting
+-- point. Schema changes from here on are new migration files.
 
-
--- ===========================================================================
--- schema.sql -- Tables, types and views
--- ===========================================================================
-
+-- ============================================================================
+-- db/schema.sql
+-- ============================================================================
 -- friends-card-inventory — PostgreSQL schema (draft)
 --
 -- Implements docs/design/friends-and-loans.md. Parenthesised numbers in
@@ -702,11 +692,9 @@ WHERE ll.status IN ('outstanding', 'in_transit');
 --          owner's notification carries an "not offered" warning.
 -- ===========================================================================
 
-
--- ===========================================================================
--- auth_bridge.sql -- Provisions an account per auth user
--- ===========================================================================
-
+-- ============================================================================
+-- db/auth_bridge.sql
+-- ============================================================================
 -- Links Supabase Auth to our own `account` table.
 --
 --   psql -d fci -v ON_ERROR_STOP=1 -f db/auth_bridge.sql
@@ -832,11 +820,9 @@ SELECT u.id,
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.id = u.id)
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.email = u.email);
 
-
--- ===========================================================================
--- policies.sql -- Row Level Security
--- ===========================================================================
-
+-- ============================================================================
+-- db/policies.sql
+-- ============================================================================
 -- Row Level Security policies.
 --
 -- REQUIRED on Supabase. The client talks straight to Postgres through
@@ -1229,11 +1215,9 @@ CREATE POLICY trade_visible ON trade
 CREATE POLICY trade_item_visible ON trade_item
   FOR SELECT USING (auth.uid() IN (from_account_id, to_account_id));
 
-
--- ===========================================================================
--- functions.sql -- Every mutation
--- ===========================================================================
-
+-- ============================================================================
+-- db/functions.sql
+-- ============================================================================
 -- Mutation RPCs.
 --
 -- Every write to inventory and loans goes through a function here. The tables
@@ -2401,84 +2385,3 @@ BEGIN
   END LOOP;
 END $$;
 
-
--- ===========================================================================
--- Did it work?
---
--- The results pane below should show every row saying PASS. Anything else
--- means the database is applied but not right -- send it back rather than
--- carrying on.
--- ===========================================================================
-
-WITH t AS (
-  SELECT c.relname, c.relrowsecurity,
-         (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE n.nspname = 'public' AND c.relkind = 'r'
-)
-SELECT * FROM (
-  SELECT 1 AS n, 'tables present' AS check_name,
-         CASE WHEN count(*) = 23 THEN 'PASS' ELSE 'FAIL' END AS result,
-         count(*) || ' of 23' AS detail
-    FROM t
-
-  UNION ALL
-  SELECT 2, 'row level security on every table',
-         CASE WHEN count(*) FILTER (WHERE NOT relrowsecurity) = 0 THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(relname, ', ') FILTER (WHERE NOT relrowsecurity),
-                  'all protected')
-    FROM t
-
-  UNION ALL
-  -- RLS on with no policy denies everything. Intended for catalog_sync_run,
-  -- a bug anywhere else -- it shows up as a permanently empty screen.
-  SELECT 3, 'every user-facing table has a policy',
-         CASE WHEN count(*) FILTER (
-                WHERE policies = 0 AND relname <> 'catalog_sync_run') = 0
-              THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(relname, ', ') FILTER (
-                    WHERE policies = 0 AND relname <> 'catalog_sync_run'),
-                  'all readable')
-    FROM t
-
-  UNION ALL
-  SELECT 4, 'operational tables stay closed',
-         CASE WHEN count(*) FILTER (
-                WHERE policies > 0 AND relname = 'catalog_sync_run') = 0
-              THEN 'PASS' ELSE 'FAIL' END,
-         'catalog_sync_run is service-role only'
-    FROM t
-
-  UNION ALL
-  SELECT 5, 'mutation functions installed',
-         CASE WHEN count(*) >= 30 THEN 'PASS' ELSE 'FAIL' END,
-         count(*) || ' app_* functions'
-    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-   WHERE n.nspname = 'public' AND p.proname LIKE 'app\_%'
-
-  UNION ALL
-  -- citext lives in the extensions schema on Supabase, not public.
-  SELECT 6, 'citext operators resolve',
-         CASE WHEN ('A'::citext = 'a'::citext) THEN 'PASS' ELSE 'FAIL' END,
-         'case-insensitive email comparison'
-
-  UNION ALL
-  SELECT 7, 'signup creates an account',
-         CASE WHEN count(*) FILTER (WHERE tgname = 'on_auth_user_created') = 1
-              THEN 'PASS' ELSE 'FAIL' END,
-         coalesce(string_agg(tgname, ', '), 'NO TRIGGER on auth.users')
-    FROM pg_trigger
-   WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal
-
-  UNION ALL
-  -- The one that matters most. If these ids do not line up, auth.uid() matches
-  -- nothing and every page in the app is empty, with no error anywhere.
-  SELECT 8, 'every signed-up user has an account row',
-         CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
-         CASE WHEN count(*) = 0 THEN 'ids line up'
-              ELSE count(*) || ' auth user(s) with no account' END
-    FROM auth.users u
-   WHERE u.email IS NOT NULL
-     AND NOT EXISTS (SELECT 1 FROM public.account a WHERE a.id = u.id)
-) checks
-ORDER BY n;

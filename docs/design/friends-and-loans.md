@@ -510,6 +510,48 @@ setup.sql`, the one-paste SQL-editor file) went with it, for the same reason
 `db push` would try to re-run it and fail. Local development and CI keep using
 `apply.mjs --local`, which never touches a database anyone depends on.
 
+### 33. Friends are found by username or exact email, never by fragment
+
+Every account claims a `username`: 3–20 characters, case-insensitive, unique.
+It is the handle you give someone across a table, where an email address is
+awkward to say out loud and reveals more than you may want to.
+
+**Both lookups are exact.** A partial match would turn `app_find_account` into
+a dump of every user in the system — RLS hides strangers precisely so that
+cannot happen, and a fuzzy search would hand it back. Requiring the whole
+handle or the whole address means you can only reach someone who told you what
+it is, which is exactly when you have standing to ask.
+
+**A username is claimed, not derived.** Deriving one from the email local part
+would leak the address and is rarely what the person would have picked. New
+accounts start with NULL and the app asks on first sign-in — a Google sign-in
+never prompts for one, so an account genuinely exists in that state.
+
+**Case-insensitive uniqueness matters more than it looks.** If `Jon` and `jon`
+were different accounts, friends searching for the handle you told them would
+sometimes find a stranger. `citext` plus a unique constraint makes that
+impossible rather than unlikely.
+
+### 34. Everyone starts with a box called "Unsorted"
+
+A new account gets one physical location, created by the same trigger that
+creates the account.
+
+Without it the first thing a new user meets is "you need a box first" — a
+chore standing between them and the thing they came to do. Cards have to live
+somewhere (9), so the app may as well answer that question itself and let the
+user rename it later.
+
+**It is not special.** An ordinary physical location: renameable, deletable,
+and subject to the same refusal as any other box when it still holds cards.
+Nothing keys off the name.
+
+**The backfill has to do this too.** `auth_bridge.sql` creates account rows for
+users who signed up before the trigger existed, and those rows bypass it — so
+the backfill provisions locations as well, for any account with no physical
+location at all. Someone who already named their own boxes does not get an
+empty "Unsorted" appearing among them.
+
 ## Open questions
 
 None. The image-mirroring question was resolved by precedent —

@@ -253,6 +253,98 @@ BEGIN
   RETURN v_id;
 END $$;
 
+/**
+ * Claim a username (33).
+ *
+ * Case-insensitive and unique: `Jon` and `jon` are the same handle, so the
+ * second person to want it is told no rather than quietly getting a different
+ * account than their friends will search for.
+ */
+CREATE OR REPLACE FUNCTION app_set_username(p_username text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE v_clean text := btrim(p_username);
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not signed in'; END IF;
+
+  IF v_clean !~ '^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$' THEN
+    RAISE EXCEPTION 'A username must be 3 to 20 characters, start with a letter or number, and contain only letters, numbers, hyphens and underscores.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  UPDATE account SET username = v_clean::citext, updated_at = now()
+   WHERE id = auth.uid();
+
+EXCEPTION WHEN unique_violation THEN
+  RAISE EXCEPTION 'That username is taken.' USING ERRCODE = 'unique_violation';
+END $$;
+
+/**
+ * Find someone to befriend, by username or by EXACT email address.
+ *
+ * Exists because account_self_or_friend deliberately hides strangers: without
+ * this, there is no way to reach anyone you are not already connected to.
+ *
+ * BOTH are exact matches, and that is the privacy design rather than a
+ * shortcut. `ilike '%jon%'` would turn this into a dump of every user in the
+ * system. Requiring the whole handle or the whole address means you can only
+ * find someone who has told you what it is -- which is exactly the situation
+ * where you have standing to ask them.
+ *
+ * A username is the friendlier half of that: it is a thing you can say out
+ * loud across a table, where an email address is not.
+ *
+ * Returns the relationship too, so the caller can say "already friends" or
+ * "request pending" instead of offering a button that will fail.
+ */
+CREATE OR REPLACE FUNCTION app_find_account(p_query text)
+RETURNS TABLE (
+  id            uuid,
+  username      text,
+  display_name  text,
+  is_self       boolean,
+  is_friend     boolean,
+  request_state text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE v_q text := btrim(p_query);
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not signed in'; END IF;
+  IF v_q = '' THEN RETURN; END IF;
+
+  RETURN QUERY
+  SELECT a.id,
+         a.username::text,
+         a.display_name,
+         a.id = auth.uid(),
+         app_is_friend(a.id),
+         CASE
+           WHEN EXISTS (SELECT 1 FROM request r
+                         WHERE r.status = 'pending' AND r.kind = 'friend'
+                           AND r.proposer_account_id = auth.uid()
+                           AND r.recipient_account_id = a.id)
+             THEN 'sent'
+           WHEN EXISTS (SELECT 1 FROM request r
+                         WHERE r.status = 'pending' AND r.kind = 'friend'
+                           AND r.recipient_account_id = auth.uid()
+                           AND r.proposer_account_id = a.id)
+             THEN 'received'
+           ELSE NULL
+         END
+    FROM account a
+   -- An address always contains @ and a username never can, so the two can
+   -- never collide and one input can safely mean either.
+   WHERE a.email = v_q::citext
+      OR a.username = v_q::citext;
+END $$;
+
 /** Be my friend (1). The only request kind that needs no prior relationship. */
 CREATE OR REPLACE FUNCTION app_send_friend_request(p_to uuid, p_note text DEFAULT NULL)
 RETURNS uuid
@@ -1139,6 +1231,8 @@ BEGIN
     'app_add_cards(uuid,card_finish,uuid,card_condition,integer)',
     'app_move_cards(uuid,card_finish,uuid,uuid,card_condition,integer)',
     'app_send_friend_request(uuid,text)',
+    'app_find_account(text)',
+    'app_set_username(text)',
     'app_offer_loan(jsonb,uuid,text)',
     'app_request_borrow(jsonb,uuid,text)',
     'app_offer_trade(jsonb,jsonb,uuid,text,uuid)',

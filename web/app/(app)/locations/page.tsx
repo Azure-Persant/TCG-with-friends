@@ -14,9 +14,11 @@ export const dynamic = 'force-dynamic'
 export default async function LocationsPage() {
   const supabase = await createClient()
 
+  // Counting in the query rather than fetching every holding: a box with a
+  // few thousand cards should still render a one-line summary cheaply.
   const { data, error } = await supabase
     .from('location')
-    .select('id, name')
+    .select('id, name, holding ( qty )')
     .eq('kind', 'physical')
     .order('name')
 
@@ -42,7 +44,13 @@ export default async function LocationsPage() {
         </div>
       </section>
 
-      <LocationList locations={data ?? []} />
+      <LocationList
+        locations={(data ?? []).map((l) => ({
+          id: l.id,
+          name: l.name,
+          cards: (l.holding ?? []).reduce((n: number, h: { qty: number }) => n + h.qty, 0),
+        }))}
+      />
     </div>
   )
 }

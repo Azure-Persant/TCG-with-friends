@@ -164,11 +164,28 @@ catalog data. The file ends with the SQL to remove them again.
 ## What exists
 
 - `/login` — magic-link sign in
+- `/welcome` — claim a username (33), required before anything else once an
+  account exists with none
 - `/collection` — your holdings, grouped by where they are, with lent-out cards
   flagged
 - `/add` — search the catalog and put copies in a box
-- `/locations` — name the boxes you keep cards in
+- `/lend` — offer cards to a friend
+- `/friends` — add friends by username or exact email, and choose which games
+  they can see
+- `/locations` — name the boxes you keep cards in, starting with "Unsorted"
+  (34)
 - `/inbox` — pending requests of all five kinds, accept or decline
+
+### Two things that surprise people
+
+**A friendship on its own shows nothing.** Friends see your cards only for
+games you have shared (4), so two new friends both see empty collections until
+someone ticks a game. That is why sharing lives on the friends page rather than
+in settings.
+
+**Friends are found by username or exact email only.** No partial or name
+search, because that would turn the app into a directory of everyone using it.
+`/friends` explains this where you would otherwise wonder.
 
 Mutations go through the `app_*` RPCs. Nothing writes to a table directly,
 because the tables reject it.

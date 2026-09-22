@@ -10,6 +10,7 @@
     "images": "tsx src/cli.ts images",
     "all": "tsx src/cli.ts all",
     "summary": "node summary.mjs",
+    "preflight": "node preflight.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -117,7 +117,10 @@ INSERT INTO auth.users (id, email, raw_user_meta_data)
 VALUES ('66666666-6666-6666-6666-666666666666', 'later@example.com', '{}'::jsonb);
 DELETE FROM account WHERE id = '66666666-6666-6666-6666-666666666666';
 
--- The backfill clause out of db/auth_bridge.sql, run again.
+-- The backfill clauses out of db/auth_bridge.sql, run again. BOTH of them:
+-- this is a copy, and when it fell out of step with the original it failed
+-- three sections later with "1 account(s) have nowhere to put a card", which
+-- reads as a bug in the feature rather than in the fixture.
 INSERT INTO account (id, email, display_name)
 SELECT u.id, u.email,
        coalesce(nullif(btrim(u.raw_user_meta_data ->> 'display_name'), ''),
@@ -126,6 +129,12 @@ SELECT u.id, u.email,
  WHERE u.email IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.id = u.id)
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.email = u.email);
+
+INSERT INTO location (account_id, kind, name)
+SELECT a.id, 'physical', 'Unsorted'
+  FROM account a
+ WHERE NOT EXISTS (SELECT 1 FROM location l
+                    WHERE l.account_id = a.id AND l.kind = 'physical');
 
 DO $$
 DECLARE n int;
@@ -180,6 +189,124 @@ BEGIN
   SELECT count(*) INTO n FROM account;
   ASSERT n = 1, format('a signed-in user with no friends should see only themselves, saw %s', n);
   RAISE NOTICE 'ok  signed in, sees exactly themselves';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Everyone starts with somewhere to put cards (34)
+-- ---------------------------------------------------------------------------
+
+-- RESET ROLE first: this asks a question about EVERY account, and as app_user
+-- the location policy would hide everyone else's boxes -- so the assertion
+-- would pass by seeing nothing rather than by the boxes existing.
+RESET ROLE;
+
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM location
+   WHERE account_id = '22222222-2222-2222-2222-222222222222'
+     AND kind = 'physical' AND name = 'Unsorted';
+  ASSERT n = 1, 'signing up must create an Unsorted box';
+
+  SELECT count(*) INTO n FROM account a
+   WHERE NOT EXISTS (SELECT 1 FROM location l
+                      WHERE l.account_id = a.id AND l.kind = 'physical');
+  ASSERT n = 0, format('%s account(s) have nowhere to put a card', n);
+  RAISE NOTICE 'ok  (34) every account starts with an Unsorted box';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Usernames (33)
+-- ---------------------------------------------------------------------------
+
+SET LOCAL ROLE app_user;
+SELECT auth.act_as('22222222-2222-2222-2222-222222222222');
+SELECT app_set_username('sarah');
+
+SELECT auth.act_as('11111111-1111-1111-1111-111111111111');
+
+-- Case-insensitive uniqueness is the point: two people cannot both be the
+-- handle their friends will search for.
+SELECT pg_temp.must_fail($$ SELECT app_set_username('SARAH') $$,
+  'claiming a username that differs only in case');
+SELECT pg_temp.must_fail($$ SELECT app_set_username('ab') $$, 'a two-character username');
+SELECT pg_temp.must_fail($$ SELECT app_set_username('_nope') $$,
+  'a username starting with an underscore');
+SELECT pg_temp.must_fail($$ SELECT app_set_username('has space') $$,
+  'a username containing a space');
+SELECT pg_temp.must_fail($$ SELECT app_set_username('waytoolongusernamehere') $$,
+  'a username over 20 characters');
+
+SELECT app_set_username('jon-c_1');
+DO $$ BEGIN
+  ASSERT (SELECT username FROM account WHERE id = auth.uid()) = 'jon-c_1',
+    'a valid username should be stored';
+  RAISE NOTICE 'ok  (33) usernames are shape-checked and case-insensitively unique';
+END $$;
+
+-- Findable by handle as well as by address, and case does not matter.
+DO $$
+DECLARE r record;
+BEGIN
+  SELECT * INTO r FROM app_find_account('SaRaH');
+  ASSERT r.id = '22222222-2222-2222-2222-222222222222', 'a username should find the account';
+  ASSERT r.username = 'sarah', 'the handle comes back too';
+  RAISE NOTICE 'ok  (33) a username finds someone, whatever the case';
+END $$;
+
+RESET ROLE;
+
+-- ---------------------------------------------------------------------------
+-- Finding someone to befriend
+-- ---------------------------------------------------------------------------
+
+SELECT auth.act_as('11111111-1111-1111-1111-111111111111');
+
+DO $$
+DECLARE r record; n int;
+BEGIN
+  SELECT * INTO r FROM app_find_account('sarah@example.com');
+  ASSERT r.id = '22222222-2222-2222-2222-222222222222',
+    'an exact email must find the account, even though RLS hides strangers';
+  ASSERT r.is_friend = false, 'not friends yet';
+  ASSERT r.is_self = false, 'not me';
+  ASSERT r.request_state IS NULL, 'no request yet';
+  RAISE NOTICE 'ok  an exact email finds someone RLS would otherwise hide';
+
+  -- Case-insensitivity comes from citext, and matters: people capitalise
+  -- their own address inconsistently when typing it from memory.
+  SELECT count(*) INTO n FROM app_find_account('SARAH@EXAMPLE.COM');
+  ASSERT n = 1, 'email matching must be case-insensitive';
+
+  SELECT count(*) INTO n FROM app_find_account('  sarah@example.com  ');
+  ASSERT n = 1, 'surrounding whitespace must not defeat the lookup';
+  RAISE NOTICE 'ok  lookup tolerates case and stray whitespace';
+
+  -- The privacy property. A partial address must find nobody, or this becomes
+  -- a way to enumerate every user in the system.
+  --
+  -- Deliberately NOT 'sarah': that is a real username by this point in the
+  -- file, so it matches for a legitimate reason and would prove nothing. A
+  -- fragment that is neither a whole address nor a whole handle is the case
+  -- that matters.
+  SELECT count(*) INTO n FROM app_find_account('sarah@exam');
+  ASSERT n = 0, 'a partial address must not match';
+  SELECT count(*) INTO n FROM app_find_account('sara');
+  ASSERT n = 0, 'a partial username must not match either';
+  SELECT count(*) INTO n FROM app_find_account('%@example.com');
+  ASSERT n = 0, 'a wildcard must be treated as a literal, not a pattern';
+  RAISE NOTICE 'ok  partial addresses and wildcards find nobody';
+END $$;
+
+SELECT app_send_friend_request('22222222-2222-2222-2222-222222222222');
+
+DO $$
+DECLARE r record;
+BEGIN
+  SELECT * INTO r FROM app_find_account('sarah@example.com');
+  ASSERT r.request_state = 'sent',
+    'the lookup should report an outgoing request, so the UI does not offer to send another';
+  RAISE NOTICE 'ok  a pending request is reported back to the sender';
 END $$;
 
 RESET ROLE;

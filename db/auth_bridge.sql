@@ -50,6 +50,16 @@ BEGIN
   )
   ON CONFLICT (id) DO NOTHING;
 
+  -- Somewhere to put cards, from the first second (34). Without it the first
+  -- thing a new user meets is "you need a box first", which is a chore standing
+  -- between them and the thing they came to do.
+  --
+  -- Named rather than special: it is an ordinary physical location, so it can
+  -- be renamed or deleted like any other.
+  INSERT INTO location (account_id, kind, name)
+  VALUES (NEW.id, 'physical', 'Unsorted')
+  ON CONFLICT DO NOTHING;
+
   RETURN NEW;
 END $$;
 
@@ -122,3 +132,15 @@ SELECT u.id,
  WHERE u.email IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.id = u.id)
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.email = u.email);
+
+-- The trigger gives new signups an Unsorted box (34); the backfill above
+-- creates account rows without going through it, so it has to do the same.
+-- Only for accounts with NO physical location: someone who already named
+-- their own boxes does not want an empty "Unsorted" appearing among them.
+INSERT INTO location (account_id, kind, name)
+SELECT a.id, 'physical', 'Unsorted'
+  FROM account a
+ WHERE NOT EXISTS (
+   SELECT 1 FROM location l
+    WHERE l.account_id = a.id AND l.kind = 'physical'
+ );

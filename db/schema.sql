@@ -199,7 +199,27 @@ CREATE TABLE account (
   email         citext NOT NULL UNIQUE,
   display_name  text NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now()
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+
+  -- The handle you give someone so they can add you (33). NULL until chosen:
+  -- a Google sign-in never asks for one, so the app has to, and an account
+  -- exists for the moment between signing in and picking it.
+  --
+  -- citext, so Jon and jon are the same person and cannot both be claimed.
+  --
+  -- Placed last, not with the other columns above: ALTER TABLE ADD COLUMN
+  -- always appends physically, and this column arrived that way in migration
+  -- 20260922010000 on every database that already existed. Declaring it here
+  -- in a different position would make a from-empty build's column order
+  -- permanently disagree with a migrated database's -- harmless to Postgres,
+  -- but it is exactly what db/README.md's drift guard exists to catch.
+  username      citext UNIQUE,
+
+  -- Enforced here as well as in app_set_username, because a username is
+  -- public and permanent enough that a bad one should be impossible to store
+  -- rather than merely discouraged.
+  CONSTRAINT account_username_shape CHECK (
+    username IS NULL OR username ~ '^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$')
 );
 
 -- Friendship is mutual and accepted (1), so it is ONE row, not two.

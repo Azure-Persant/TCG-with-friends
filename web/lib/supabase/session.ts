@@ -16,6 +16,11 @@ const PUBLIC_PATHS = ['/login', '/auth']
  * screen instead of a page of empty tables.
  */
 export async function updateSession(request: NextRequest) {
+  // Server Components cannot see the current path. The username gate in the
+  // app layout needs it to avoid redirecting /welcome to itself, so it is
+  // forwarded as a header.
+  request.headers.set('x-pathname', request.nextUrl.pathname)
+
   let response = NextResponse.next({ request })
 
   const { url: supabaseUrl, anonKey } = supabaseEnv()

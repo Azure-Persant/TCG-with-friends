@@ -3,12 +3,15 @@
 Everything established so far, for whoever picks this up next — including a
 future me.
 
-**Status:** design settled, database built and tested, all mutations
+**Status:** design settled, database built, migrated and tested, all mutations
 implemented as Postgres functions, catalog ingest working, and a Next.js app
-with working auth covering sign-in, your collection, and the request inbox.
+with working auth covering sign-in, your collection, the request inbox, and
+now the friends/lending UI itself — adding a friend, sharing a game, offering
+a loan.
 
 Loans, borrows, trades, friend requests and sub-loans are all implemented and
-tested. 68 assertions across five suites.
+tested, reachable from the app rather than only from the RPCs. Everyone gets a
+username (33) and a default "Unsorted" box (34) on signup.
 
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
@@ -309,24 +312,19 @@ else about the card is the lender's.
 
 ## 8. Next steps
 
-1. **Auth wiring** — Supabase auth, with `account.id` mirroring
-   `auth.users.id`, which is what every policy in `db/policies.sql` assumes.
-   Magic link plus Google.
-2. **Inventory entry** — the first real test of the wide bucket key. Calls
-   `app_add_cards` and `app_move_cards`.
-3. **Loan flows** — the RPCs already exist (`app_create_loan`,
-   `app_accept_loan`, `app_mark_returned`, `app_confirm_receipt`,
-   `app_force_close_line`, `app_request_transfer`, `app_approve_transfer`),
-   so this is UI over a tested backend.
+Done: auth wiring, inventory entry (`/add`, `/locations`), and loan flows
+— `/lend` and `/friends` put a UI over the RPCs that used to be reachable only
+from a script.
+
 **Open work is tracked as GitHub issues**, not in this file: catalog import,
 per-card borrow origins, verifying email sign-in, custom SMTP, removing the
 sample cards, and card images. This file explains the project; the issues
 track what is left.
 
-4. **Notifications** — the largest remaining gap, and (23) has changed its shape
-   for the better: there is now exactly one table to watch and one place to
-   emit from, rather than five. Every flow assumes something tells the other
-   person; nothing does yet.
+**Notifications** are the largest remaining gap, and (23) has changed its shape
+for the better: there is now exactly one table to watch and one place to
+emit from, rather than five. Every flow assumes something tells the other
+person; nothing does yet.
 
 **The app never touches money (29).** A sale listing is an intent marker with
 an optional asking price; people settle via PayPal, Zelle, Venmo or cash on

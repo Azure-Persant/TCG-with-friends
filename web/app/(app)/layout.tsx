@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -15,9 +16,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: account } = await supabase
     .from('account')
-    .select('display_name')
+    .select('display_name, username')
     .eq('id', user.id)
     .single()
+
+  // A username is claimed once and everything else waits for it (33). Checked
+  // in the layout so no page has to remember: a Google sign-in never asks, so
+  // an account exists in this state for real users, not just in theory.
+  //
+  // /welcome is excluded or this would redirect to itself forever.
+  const pathname = (await headers()).get('x-pathname') ?? ''
+  if (account && !account.username && !pathname.startsWith('/welcome')) {
+    redirect('/welcome')
+  }
 
   const { count: pending } = await supabase
     .from('request')
@@ -35,6 +46,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/add" className="font-medium hover:underline">
             Add cards
           </Link>
+          <Link href="/lend" className="font-medium hover:underline">
+            Lend
+          </Link>
+          <Link href="/friends" className="font-medium hover:underline">
+            Friends
+          </Link>
           <Link href="/locations" className="font-medium hover:underline">
             Boxes
           </Link>
@@ -48,7 +65,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
         </nav>
         <form action="/auth/signout" method="post" className="flex items-center gap-3">
-          <span className="text-sm text-neutral-500">{account?.display_name ?? user.email}</span>
+          <span className="text-sm text-neutral-500">
+            {account?.username ? `@${account.username}` : (account?.display_name ?? user.email)}
+          </span>
           <button type="submit" className="text-sm text-neutral-500 hover:underline">
             Sign out
           </button>

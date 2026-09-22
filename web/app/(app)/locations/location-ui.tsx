@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { createLocation, deleteLocation, renameLocation } from './actions'
 
-type Location = { id: string; name: string | null }
+type Location = { id: string; name: string | null; cards: number }
 
 export function NewLocation() {
   const [name, setName] = useState('')
@@ -126,7 +127,15 @@ function LocationRow({ location }: { location: Location }) {
         </form>
       ) : (
         <div className="flex items-center gap-3">
-          <span className="flex-1 text-sm font-medium">{location.name ?? 'Unnamed'}</span>
+          <Link
+            href={`/locations/${location.id}`}
+            className="flex-1 text-sm font-medium hover:underline"
+          >
+            {location.name ?? 'Unnamed'}
+          </Link>
+          <span className="text-xs text-neutral-500">
+            {location.cards === 0 ? 'empty' : `${location.cards} card${location.cards === 1 ? '' : 's'}`}
+          </span>
           <button
             onClick={() => setEditing(true)}
             className="text-sm text-neutral-500 hover:underline"

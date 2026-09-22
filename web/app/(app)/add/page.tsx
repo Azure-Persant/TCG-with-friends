@@ -56,7 +56,8 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
         `id, collector_number,
          card!inner ( name ),
          card_set ( name, prefix ),
-         card_edition_finish ( finish )`,
+         card_edition_finish ( finish ),
+         card_image ( storage_key, variant )`,
       )
       .ilike('card.name', `%${query}%`)
       .limit(40)
@@ -113,6 +114,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
             setName={ed.card_set?.name ?? null}
             collectorNumber={ed.collector_number}
             finishes={(ed.card_edition_finish ?? []).map((f) => f.finish)}
+            imageStorageKey={ed.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null}
             locations={locations}
           />
         ))}
@@ -127,4 +129,5 @@ type Edition = {
   card: { name: string } | null
   card_set: { name: string; prefix: string } | null
   card_edition_finish: { finish: string }[] | null
+  card_image: { storage_key: string; variant: string }[] | null
 }

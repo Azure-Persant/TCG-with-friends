@@ -1,10 +1,10 @@
-# friends-card-inventory
+# TCG with Friends
 
 A card inventory app for [Grand Archive](https://index.gatcg.com), built around
 loaning cards to friends and tracking who has what.
 
 **Start here: [`HANDOFF.md`](./HANDOFF.md)** — current state, the data model,
-and why it looks the way it does.
+where this repo came from, and why it looks the way it does.
 
 | | |
 |---|---|
@@ -12,7 +12,9 @@ and why it looks the way it does.
 | [`docs/design/friends-and-loans.md`](./docs/design/friends-and-loans.md) | All 34 design decisions with rationale. |
 | [`db/`](./db) | PostgreSQL schema, RLS policies, and tests. |
 | [`supabase/migrations/`](./supabase/migrations) | Schema history, applied to the live project with the Supabase CLI. |
+| [`web/`](./web) | The Next.js app itself: auth, collection, friends, lending, inbox. |
 | [`ingest/`](./ingest) | Grand Archive catalog and image worker. |
 
-Status: design settled, database built and tested, catalog ingest working. No
-application code yet.
+Status: database built, migrated and tested; catalog ingest working; a Next.js
+app with working auth, collection management, friends, lending and an inbox is
+live against a real Supabase project.

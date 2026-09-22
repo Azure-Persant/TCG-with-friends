@@ -19,6 +19,38 @@ Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 
 ---
 
+## Where this lives
+
+**This repo — `Azure-Persant/TCG-with-friends` — is the only live, updated
+copy.** It didn't start that way, and the history is worth knowing before you
+go looking for something in the wrong place.
+
+The design and database were built in a different repo,
+`JonCorrea/friends-card-inventory`. Separately, an earlier prototype of this
+same idea had been built with a tool called Softgen, in a repo the tool
+auto-named `sg-e300915b-f09d-430b-87c3-1c85baec61a4-1777483298` under a
+`Azure-Persant` account — different codebase (Next.js Pages Router), different
+generated schema, but pointed at the *same* Supabase project
+(`wtifzovtlxttovnguhgo`) as this one would later use.
+
+That went unnoticed until 2026-09-21, while adopting migrations for issue #14:
+the live Supabase project turned out to be running the Softgen app's 11-table
+schema (`cards`, `decks`, `profiles`, `sets`, `user_collections`, …), not this
+project's — nothing from `db/schema.sql` had ever actually been deployed.
+Decided to retire the Softgen app rather than run two apps off one project: its
+tables, functions and signup trigger were dropped, and this project's schema
+was applied for the first time as the migration baseline (decision 32).
+
+The Softgen repo was then renamed to `TCG-with-friends`, and on 2026-09-22
+became this repo's actual content: `JonCorrea/friends-card-inventory`'s full
+history was pushed here, replacing the Softgen code entirely, and a branch of
+real unmerged work from that repo (the friends/lending UI, usernames, a
+default box — decisions 33 and 34) was reconciled in on top. Both repos'
+stale branches were deleted. `JonCorrea/friends-card-inventory` is now
+archived — read-only, kept around only until it's deleted outright.
+
+---
+
 ## 1. What this is
 
 A card inventory app for [Grand Archive](https://index.gatcg.com), built around
@@ -81,7 +113,7 @@ complexity than anything else in the project.
 
 ## 3. Decisions you'd otherwise re-litigate
 
-Full list of all 22 with rationale: **`docs/design/friends-and-loans.md`**.
+Full list of all 34 with rationale: **`docs/design/friends-and-loans.md`**.
 The ones most likely to look wrong without context:
 
 **Loans require the borrower to accept, and unfriending is blocked while a
@@ -209,8 +241,8 @@ became explicit when the smoke test tripped over it on a final return.
 
 | Path | What |
 |---|---|
-| `docs/design/friends-and-loans.md` | All 22 decisions with rationale. The source of truth. |
-| `db/schema.sql` | 16 tables, 2 views. Portable Postgres, no Supabase dependency. |
+| `docs/design/friends-and-loans.md` | All 34 decisions with rationale. The source of truth. |
+| `db/schema.sql` | 23 tables. Portable Postgres, no Supabase dependency. |
 | `db/policies.sql` | Row Level Security. **Required on Supabase.** |
 | `db/functions.sql` | Every mutation, as `SECURITY DEFINER` RPCs. |
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
@@ -228,21 +260,24 @@ became explicit when the smoke test tripped over it on a final return.
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
-Verified against PostgreSQL 16: schema applies clean, both test suites pass,
-and the ingest ran end-to-end against a real database.
+Verified against PostgreSQL 16: schema applies clean, all five test suites
+pass, and the ingest ran end-to-end against a real database.
 
 ### Running it
 
-```bash
-createdb fci
-psql -d fci -v ON_ERROR_STOP=1 -f db/schema.sql
-psql -d fci -v ON_ERROR_STOP=1 -f db/local/auth_shim.sql   # local only
-psql -d fci -v ON_ERROR_STOP=1 -f db/policies.sql
-psql -d fci -v ON_ERROR_STOP=1 -f db/functions.sql
-psql -d fci -v ON_ERROR_STOP=1 -f db/tests/schema_smoke.sql
-psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rls_smoke.sql
-psql -d fci -v ON_ERROR_STOP=1 -f db/tests/rpc_smoke.sql
+Local/CI database (throwaway, built from empty — see `db/README.md`):
 
+```bash
+cd db && npm install
+npm run apply:local -- --url "postgresql://localhost/fci"
+npm test -- --url "postgresql://localhost/fci"
+```
+
+The live Supabase project instead takes migrations — `supabase/migrations/`,
+applied with `npx supabase db push`. See `db/README.md`, "Changing the
+schema," before touching it.
+
+```bash
 cd ingest && npm install && cp .env.example .env
 npm run catalog    # ~90 seconds
 npm run images     # ~19 minutes, 0.76 GB

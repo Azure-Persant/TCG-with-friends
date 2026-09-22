@@ -114,17 +114,23 @@ pooler**. Two traps, same as ever:
 
 `supabase/migrations/` starts with one **baseline migration**: `schema.sql`,
 `auth_bridge.sql`, `policies.sql` and `functions.sql`, concatenated in the
-order above, as of the day migrations were adopted. The live project already
-had this schema before that day, so pushing the baseline to it would fail on
-"already exists." Mark it applied without re-running it, once, per project:
+order above, as of the day migrations were adopted (2026-09-21).
 
-```bash
-npx supabase migration repair 20260921034122 --status applied --db-url "postgresql://..."
-```
+The assumption going in was that the live project already had this schema, in
+which case pushing the baseline would fail on "already exists" and the fix is
+`npx supabase migration repair <version> --status applied --db-url "..."` —
+marking it applied without re-running it. **That assumption turned out to be
+wrong**: the project was actually running an unrelated app's schema (see
+`HANDOFF.md`, "Where this lives"), so the real fix was dropping that schema
+and pushing the baseline for real. Keep `migration repair` in mind if you ever
+stand up a *second* Supabase project from a database that was hand-built
+before migrations existed — this one didn't need it in the end.
 
-After that, `supabase db push` only ever applies migrations the target
+After the baseline, `supabase db push` only ever applies migrations the target
 doesn't have yet — safe to run again, and safe to run against a database that
-has data in it.
+has data in it. `supabase/migrations/20260922010000_username_and_unsorted_box.sql`
+is the first real example: it ran against the live project on 2026-09-22
+alongside real account rows, and nothing was lost.
 
 **Retired rather than kept:** `apply.mjs`'s old remote mode (it applied
 `schema.sql` straight to whatever `--url` pointed at — exactly the unmigrated

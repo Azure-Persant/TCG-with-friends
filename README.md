@@ -17,5 +17,6 @@ where this repo came from, and why it looks the way it does.
 
 Status: database built, migrated and tested; catalog and images imported for
 real; a Next.js app with working auth, collection management, a public
-catalog browser with filters, a deck builder, friends, lending and an inbox
-is live against a real Supabase project.
+catalog browser with filters and a card detail view, a deck builder,
+friends, lending, an inbox, and public collection sharing is live against a
+real Supabase project.

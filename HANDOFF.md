@@ -7,8 +7,8 @@ future me.
 implemented as Postgres functions, catalog **imported for real** (63 sets,
 ~2,500 cards, ~4,900 editions) with images backfilled to Supabase Storage, and
 a Next.js app covering sign-in, a public catalog browser with filters, your
-collection, the request inbox, the friends/lending UI, and a deck builder —
-all live in production.
+collection, the request inbox, the friends/lending UI, a deck builder, a
+card detail view, and public collection sharing — all live in production.
 
 Loans, borrows, trades, friend requests and sub-loans are all implemented and
 tested, reachable from the app rather than only from the RPCs. Everyone gets a
@@ -18,7 +18,10 @@ The visual design was redone to match the retired Softgen prototype's actual
 look (§8) after the first pass fell short of it twice, and the nav/landing
 page were restructured around a "Select Your Game" page and a per-account
 `selected_game_id` (§9) — the first place the app itself is aware of the
-game axis that was always latent in the schema.
+game axis that was always latent in the schema. A card detail dialog (§10,
+issue #23) and a public, token-based collection share link (§11, issue #22)
+followed, both read-only additions against the existing catalog/holding
+model with no data-model rework needed.
 
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
@@ -217,7 +220,7 @@ setting. Supabase reads the `sub` claim out of `request.jwt.claims`. So the
 project's entire privacy model had been proven against a function that did not
 resemble the one it would run against.
 
-The shim now implements the real formula, and all six suites drive it through
+The shim now implements the real formula, and all seven suites drive it through
 forged JWT claims. Everything still passed — but that was a coin-flip, not a
 result, and it is the sort of gap that surfaces in production as "why is
 everything empty".
@@ -264,7 +267,7 @@ became explicit when the smoke test tripped over it on a final return.
 | Path | What |
 |---|---|
 | `docs/design/friends-and-loans.md` | All 34 decisions with rationale. The source of truth. |
-| `db/schema.sql` | 25 tables. Portable Postgres, no Supabase dependency. |
+| `db/schema.sql` | 26 tables. Portable Postgres, no Supabase dependency. |
 | `db/policies.sql` | Row Level Security. **Required on Supabase.** |
 | `db/functions.sql` | Every mutation, as `SECURITY DEFINER` RPCs. |
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |
@@ -274,6 +277,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
 | `db/tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, RLS (§8). |
+| `db/tests/collection_share_smoke.sql` | Share tokens: create/revoke/delete, and guest resolution with no `auth.uid()` at all (§11). |
 | `db/auth_bridge.sql` | Provisions an account per auth user (31), defaults `selected_game_id` (§9.2). |
 | `db/apply.mjs` | Builds a throwaway local/CI database from the files above. |
 | `supabase/migrations/` | The deployable history. Applied to the live project with `supabase db push` (32). |
@@ -282,14 +286,17 @@ became explicit when the smoke test tripped over it on a final return.
 | `web/app/(app)/decks/`, `.../decks/[id]/` | The deck builder (§8). |
 | `web/app/_components/top-nav.tsx`, `nav-menu.tsx` | The shared nav bar and its hand-rolled dropdowns (§9.3). |
 | `web/app/_components/card-tile.tsx`, `card-thumbnail.tsx` | The two card-art shapes: grid tile vs. row thumbnail. |
+| `web/app/_components/card-detail-dialog.tsx` | Full card text/stats plus a printings switcher (§10, issue #23). |
 | `web/app/_components/filter-bar.tsx` | The `/cards`+`/add` element/type/subtype/class/cost filter UI. |
+| `web/app/(app)/collection/share/` | Create/revoke/delete public share links (§11, issue #22). |
+| `web/app/shared/[token]/` | The public, read-only page a share link opens — no account needed. |
 | `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
 | `.github/workflows/ci.yml` | Tests, plus the schema-files-vs-migrations drift guard (§7). |
 | `.claude/skills/` | Matt Pocock's skills, installed as editable copies. |
 | `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). Already run for real — see §6. |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
-Verified against PostgreSQL 16: schema applies clean, all six test suites
+Verified against PostgreSQL 16: schema applies clean, all seven test suites
 pass, the migration-vs-schema-files drift guard is clean, and the ingest has
 run end-to-end against the real live database (not just a test one) — catalog
 and images are both populated for real, not placeholder data.
@@ -421,6 +428,17 @@ issue, check the DOM directly (`naturalWidth`, `complete`, computed
 `opacity`/`position`) — it was a browser paint-timing artifact in the
 screenshot tool, not a rendering bug, and the DOM was correct the whole time.
 
+**A reference app's own doc comment about privacy is not proof its code
+does that.** While designing collection sharing (§11), the retired Softgen
+app's `shared_collection()` SQL function was read directly rather than
+trusted from its TypeScript type's comment ("no locations and no borrower
+names"). The function actually **returns** `personal_location`,
+`sale_location` and `loaned_to` — the frontend simply never rendered those
+columns. Reading a reference's UI/UX is fine and encouraged (§9.1); trusting
+its privacy *claims* without reading the query that backs them is not — this
+project's own `shared_collection` was written to actually omit those columns
+from its `RETURNS TABLE`, not merely to not display them.
+
 ---
 
 ## 8. Deck builder (#21, closed)
@@ -548,15 +566,15 @@ The flat link row became dropdown-based, via a small hand-rolled `NavMenu`
 component (`web/app/_components/nav-menu.tsx` — click-to-open, click-outside
 and Escape to close, no Radix in this codebase):
 
-- **Collection** (dropdown): Collection, Add Cards, Boxes, Lend
+- **Collection** (dropdown): Collection, Add Cards, Boxes, Lend, Share (§11)
 - **Browse Cards** (renamed from "Browse")
 - **Decks**
 - **Friends** (dropdown): Friends, Lend — Lend is reachable from both
   Collection and Friends on purpose, since it's equally an inventory action
   and a relationship action
 - The signed-in **account menu** (username, top right): Inbox (with the
-  pending-request badge), Friends, Game Selection, then Sign out below a
-  divider — Inbox dropped off the top-level bar entirely
+  pending-request badge), Friends, Profile (#40), Game Selection, then Sign
+  out below a divider — Inbox dropped off the top-level bar entirely
 
 `/cards` is reachable both signed in and signed out, which resurfaced a bug
 worth remembering: it used to always render the anonymous header regardless
@@ -566,41 +584,126 @@ touched. Fixed by extracting `TopNav` into one shared component both
 `/cards` and the `(app)` layout render from the same auth check, so the two
 surfaces can't drift apart again.
 
+## 10. Card detail view (#23)
+
+The lightbox added for #19 only enlarged the art. `CardTile` now takes an
+optional `onOpenDetail`, which — when passed — replaces that lightbox with
+`CardDetailDialog`: cost, element, type/subtype/class, whichever of
+power/life/durability/speed/level a card actually has (most cards have none
+of these — `null`, not `0`, and the dialog only renders the ones that are
+non-null), the rules text (`effect_raw`, plain text — not `effect_html`,
+which is safe HTML from the ingest but not worth `dangerouslySetInnerHTML`
+for a field with no editorial review between the API and the page),
+illustrator, a "Restricted" badge (39), and a switcher across every other
+printing of the same card.
+
+Fetched **client-side on open**, not server-rendered: it opens from a click
+on an already-rendered grid, not a fresh page load, and catalog tables are
+world-readable (RLS `USING (true)`) so no auth is needed either. No RPC or
+schema changes — every field lives in `card.attributes` or a `card_edition`
+column already; confirmed by querying a handful of live cards directly
+before writing any component, rather than assuming the shape from the
+schema comment alone.
+
+Wired into `/cards` and `/add` only, per the issue's own scope. `/collection`
+and the deck builder keep their plain art-only lightbox for now — nothing
+stops `onOpenDetail` reaching them later, it just wasn't asked for here.
+
+## 11. Collection sharing (#22)
+
+A public, read-only link to your collection — reachable by anyone who has
+the URL, no account needed, generated from `/collection/share` and opened at
+`/shared/[token]`.
+
+**What a share shows, and why:** name, quantity, finish and condition per
+`(edition, finish, condition)` group, with copies out on loan broken out as
+their own count (`qty_on_loan`) rather than folded into "owned" — **never a
+location, and never who is holding a loaned copy.** (14)'s privacy rule
+applies here at least as strictly as it does to friends visiting
+`friend_visible_holding`; `shared_collection`'s `RETURNS TABLE` simply has no
+column that could carry either. This was a real design question resolved
+with the user before writing any schema, not assumed — see the trap in §7
+about the retired Softgen app's own version of this getting it wrong despite
+its type's own doc comment claiming otherwise.
+
+**Open link only, no invited-email restriction.** The retired Softgen
+app's `collection_shares` could also restrict a token to one signed-in
+address; this project's issue asked specifically for a *public* link, so
+that mode was deliberately left out rather than guessed at — an
+invited-email restriction is its own feature with its own auth questions
+(checking the viewer's JWT email against the share), not a natural
+extension of an open token.
+
+**One flat share, not scoped buckets.** The reference app let an owner
+toggle personal/for-sale/loaned-out visibility per share. This project's
+holdings have no such three-way split to begin with, so `collection_share`
+carries no scoping flags at all — every share of an account shows the same
+view of that account's whole physical collection. An account may still hold
+several share rows (different labels, different expiries), since nothing
+about *what* a share shows varies between them; only revocation and expiry
+do.
+
+**Resolution follows the request/loan pattern exactly.** `token ->
+collection_share` goes through `app_resolve_collection_share`, an internal,
+ungranted `SECURITY DEFINER` helper — never called by a client directly,
+only by `shared_collection` and `shared_collection_meta` — that returns no
+row for an unknown, revoked, or expired token, indistinguishably, same
+discipline as `app_require_recipient` elsewhere in this codebase. A guest
+viewer never touches `collection_share`'s RLS policy at all; the table's
+own policy (`collection_share_own`, SELECT-only) only ever has to answer for
+the owner.
+
+**Filed separately rather than bundled in, because they turned out not to
+be this issue:** the owner's first answer on scope pulled in showing this
+same finish/condition detail to *friends* (not just guests with a public
+link), and letting friends request to borrow or buy directly from a listed
+card. Both are real, separate pieces of work — #47 (friend-visible
+finish/condition — a UI change against the already-computed
+`friend_visible_holding` view) and #48 (a listing UI: `listing` and
+`app_set_listing` have existed since (27), but nothing in `web/app` has ever
+called `app_set_listing`, confirmed by grep, so there is no way today to
+even mark a card for trade or sale, let alone request one). Resist the pull
+to build those inside this issue's schema — they don't share one.
+
 ---
 
-## 10. Next steps
+## 12. Next steps
 
 Done: auth wiring, catalog import + images + filters, inventory entry
 (`/add`, `/locations`), loan flows (`/lend`, `/friends`), a deck builder
-(§8), and the visual redesign + game-selection landing page (§9) — all live
-in production.
+(§8), the visual redesign + game-selection landing page (§9), letting the
+owner pick a box per card on borrow approval (#12), a card detail view
+(§10, #23), a profile page for display name/username (#40), the foil
+shimmer treatment and a restricted-card badge (#38, #39), and public
+collection sharing (§11, #22) — all live in production except #22 and #23,
+which are open PRs as of this writing rather than merged yet.
 
 **Open work is tracked as GitHub issues, not in this file.** As of
 2026-09-23, all open:
 
-*Carried over from before this session:*
-- **#12** — let the owner pick a different box per card when approving a
-  borrow request
+*Carried over, blocked on the user's own credentials/inbox, not code:*
 - **#13** — verify email-code sign-in works for a brand new account
-- **#14** — set up custom SMTP before inviting anyone (needed before a
-  second real person uses this — Supabase's built-in email is rate-limited
-  and testing-only)
+  (needs a real signup against a real inbox — deferred until done together)
+- **#14** — set up custom SMTP before inviting anyone (needs an SMTP
+  provider account and API key only the user can create — deferred)
 
 *Softgen-parity work, filed after reading its actual source (§9.1):*
-- **#22** — public collection sharing via read-only links
-- **#23** — card detail view (full text/stats, plus the "/cards merges
-  printings of the same card into one tile with a popup" behavior)
 - **#29** — edit or remove a holding (real gap: no way to decrease/delete
   one today, only add and move)
 - **#30** — bulk-select and move cards on `/collection`
-- **#32**–**#39** — deck cover art, decklist import/export, public deck
+- **#32**–**#37** — deck cover art, decklist import/export, public deck
   showcase, deck sharing via link, deck duplication, per-deck-card foil/
-  printing swap, the foil shimmer visual treatment, restricted-card badge
-  (all detailed in §8)
-- **#40** — a profile/settings page to view and change your display name
-  (there's currently no way back to it after the one-time `/welcome` step)
+  printing swap (all detailed in §8)
 - **#41** — choose which printing represents a card on the collection grid
-  (low priority)
+  (low priority; deliberately deferred until #23's printing-merge behavior
+  actually lands on `/collection` — today each holding row is already one
+  specific printing, so there is nothing yet for this to disambiguate)
+
+*Grew out of scoping #22, filed separately rather than bundled in (§11):*
+- **#47** — show finish and condition in friend-visible holdings, not just
+  the aggregate totals `friend_visible_holding` exposes today
+- **#48** — a UI for the existing `listing` table / `app_set_listing` RPC
+  (27), plus letting a friend request to borrow or buy a listed card
 
 **Notifications** are still the largest gap **not yet filed as an issue** —
 (23) already gives it the right shape: one `request` table to watch, one

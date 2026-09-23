@@ -187,12 +187,12 @@ function LoginForm() {
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
             placeholder="123456"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
           />
           <button
             type="submit"
             disabled={busy || code.length < 6}
-            className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {busy ? 'Checking…' : 'Sign in'}
           </button>
@@ -247,12 +247,12 @@ function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
         />
         <button
           type="submit"
           disabled={busy}
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {busy ? 'Sending…' : 'Email me a sign-in code'}
         </button>
@@ -293,7 +293,7 @@ function GoogleMark() {
 function Shell({ children }: { children?: React.ReactNode }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Card inventory</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-accent">Card inventory</h1>
       <p className="mt-2 text-sm text-neutral-500">
         Keep track of what you own, what you have lent out, and who still has it.
       </p>

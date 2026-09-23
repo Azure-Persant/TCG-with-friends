@@ -57,9 +57,9 @@ export function AddForm({
 
   return (
     <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <CardThumbnail storageKey={imageStorageKey} alt={cardName} />
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-col gap-0.5">
           <span className="font-medium">{cardName}</span>
           <span className="text-xs text-neutral-500">
             {setName ?? 'Unknown set'}
@@ -125,7 +125,7 @@ export function AddForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {pending ? 'Adding…' : 'Add'}
         </button>

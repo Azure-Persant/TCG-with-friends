@@ -49,8 +49,8 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
       <header className="flex items-baseline justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
-        <h1 className="text-lg font-semibold tracking-tight">Card inventory</h1>
-        <Link href="/login" className="text-sm font-medium hover:underline">
+        <h1 className="text-lg font-semibold tracking-tight text-accent">Card inventory</h1>
+        <Link href="/login" className="text-sm font-medium hover:text-accent hover:underline">
           Sign in
         </Link>
       </header>
@@ -61,11 +61,11 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
           defaultValue={query}
           placeholder="Search for a card…"
           aria-label="Card name"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
         />
         <button
           type="submit"
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Search
         </button>
@@ -93,7 +93,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         {results.map((ed) => (
           <li
             key={ed.id}
-            className="flex items-start gap-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+            className="flex items-center gap-3 rounded-lg border border-neutral-200 p-4 transition hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
           >
             <CardThumbnail
               storageKey={ed.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null}

@@ -39,31 +39,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <header className="flex items-baseline justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
-        <nav className="flex gap-5 text-sm">
-          <Link href="/collection" className="font-medium hover:underline">
-            Collection
+        <div className="flex items-baseline gap-6">
+          <Link href="/collection" className="text-lg font-semibold tracking-tight text-accent">
+            Card inventory
           </Link>
-          <Link href="/add" className="font-medium hover:underline">
-            Add cards
-          </Link>
-          <Link href="/lend" className="font-medium hover:underline">
-            Lend
-          </Link>
-          <Link href="/friends" className="font-medium hover:underline">
-            Friends
-          </Link>
-          <Link href="/locations" className="font-medium hover:underline">
-            Boxes
-          </Link>
-          <Link href="/inbox" className="font-medium hover:underline">
-            Inbox
-            {pending ? (
-              <span className="ml-1.5 rounded-full bg-neutral-900 px-1.5 py-0.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
-                {pending}
-              </span>
-            ) : null}
-          </Link>
-        </nav>
+          <nav className="flex gap-5 text-sm">
+            <Link href="/collection" className="font-medium hover:text-accent">
+              Collection
+            </Link>
+            <Link href="/add" className="font-medium hover:text-accent">
+              Add cards
+            </Link>
+            <Link href="/cards" className="font-medium hover:text-accent">
+              Browse
+            </Link>
+            <Link href="/lend" className="font-medium hover:text-accent">
+              Lend
+            </Link>
+            <Link href="/friends" className="font-medium hover:text-accent">
+              Friends
+            </Link>
+            <Link href="/locations" className="font-medium hover:text-accent">
+              Boxes
+            </Link>
+            <Link href="/inbox" className="font-medium hover:text-accent">
+              Inbox
+              {pending ? (
+                <span className="ml-1.5 rounded-full bg-accent px-1.5 py-0.5 text-xs text-white">
+                  {pending}
+                </span>
+              ) : null}
+            </Link>
+          </nav>
+        </div>
         <form action="/auth/signout" method="post" className="flex items-center gap-3">
           <span className="text-sm text-neutral-500">
             {account?.username ? `@${account.username}` : (account?.display_name ?? user.email)}

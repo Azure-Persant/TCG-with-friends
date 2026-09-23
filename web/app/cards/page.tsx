@@ -1,27 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { CardTile } from '@/app/_components/card-tile'
 import { TopNav } from '@/app/_components/top-nav'
 import { FilterBar, readFilterValues, hasAnyFilter, type FilterOption } from '@/app/_components/filter-bar'
+import { CardsGrid, type SearchRow } from './cards-grid'
 
 export const dynamic = 'force-dynamic'
 
 type Search = Record<string, string | string[] | undefined>
-
-type SearchRow = {
-  edition_id: string
-  collector_number: string | null
-  card_name: string | null
-  set_name: string | null
-  set_prefix: string | null
-  finishes: string[] | null
-  image_storage_key: string | null
-  element: string | null
-  types: string[] | null
-  subtypes: string[] | null
-  classes: string[] | null
-  restricted: boolean | null
-}
 
 /** number() -> undefined for '' or garbage, never NaN reaching Postgres. */
 function toInt(v: string): number | undefined {
@@ -125,27 +110,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {results.map((ed) => (
-            <CardTile
-              key={ed.edition_id}
-              storageKey={ed.image_storage_key}
-              alt={ed.card_name ?? 'Unknown card'}
-              foil={(ed.finishes ?? []).includes('FOIL')}
-              restricted={ed.restricted ?? false}
-            >
-              <p className="truncate text-sm font-medium">{ed.card_name ?? 'Unknown card'}</p>
-              <p className="truncate text-xs text-slate-400">
-                {ed.set_name ?? 'Unknown set'}
-                {ed.collector_number ? ` · #${ed.collector_number}` : ''}
-              </p>
-              <p className="truncate text-xs text-slate-400">
-                {ed.element ? `${ed.element} · ` : ''}
-                {(ed.finishes ?? []).join(', ') || 'NONFOIL'}
-              </p>
-            </CardTile>
-          ))}
-        </div>
+        <CardsGrid results={results} />
       </div>
     </div>
   )

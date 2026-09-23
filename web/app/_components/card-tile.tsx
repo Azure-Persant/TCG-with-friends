@@ -19,6 +19,7 @@ export function CardTile({
   alt,
   foil = false,
   restricted = false,
+  onOpenDetail,
   children,
 }: {
   storageKey: string | null
@@ -27,19 +28,33 @@ export function CardTile({
   foil?: boolean
   /** Standard-format restricted badge (39) -- attributes->legality->STANDARD->limit = 0. */
   restricted?: boolean
+  /**
+   * When given, clicking the art opens a full card detail view (23) instead
+   * of the plain enlarge-the-art lightbox below -- the detail dialog already
+   * shows the art large, so the two are alternatives, not layers. Unlike the
+   * lightbox, this stays clickable even with no image: there is still text
+   * and stats to show.
+   */
+  onOpenDetail?: () => void
   children?: React.ReactNode
 }) {
   const [failed, setFailed] = useState(false)
   const [enlarged, setEnlarged] = useState(false)
   const hasImage = storageKey && !failed
+  const clickable = onOpenDetail ? true : hasImage
+
+  function handleClick() {
+    if (onOpenDetail) onOpenDetail()
+    else if (hasImage) setEnlarged(true)
+  }
 
   return (
     <div className="panel flex flex-col overflow-hidden">
       <button
         type="button"
-        onClick={() => hasImage && setEnlarged(true)}
-        disabled={!hasImage}
-        aria-label={hasImage ? `Enlarge ${alt}` : alt}
+        onClick={handleClick}
+        disabled={!clickable}
+        aria-label={onOpenDetail ? `View ${alt}` : hasImage ? `Enlarge ${alt}` : alt}
         className="group relative block aspect-[2.5/3.5] w-full overflow-hidden bg-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-inset disabled:cursor-default"
       >
         {hasImage ? (

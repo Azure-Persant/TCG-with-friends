@@ -82,11 +82,13 @@ export function NavMenu({
               ) : null}
             </Link>
           ))}
-          {footer && (
-            <div className="mt-1 border-t border-slate-200 pt-1" onClick={() => setOpen(false)}>
-              {footer}
-            </div>
-          )}
+          {/* No onClick-close here: it did close immediately once for
+              Sign out, but React unmounting this whole block synchronously
+              on click -- before the browser's native form submission for
+              the now-removed <form> could actually fire -- silently
+              cancelled the POST. The form's own action navigates the page
+              away regardless, so there is nothing to close by hand. */}
+          {footer && <div className="mt-1 border-t border-slate-200 pt-1">{footer}</div>}
         </div>
       )}
     </div>

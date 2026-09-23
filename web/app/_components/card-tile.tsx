@@ -1,0 +1,59 @@
+'use client'
+
+import Image from 'next/image'
+import { useState } from 'react'
+import { cardImageUrl } from '@/lib/images'
+import { Lightbox } from './card-thumbnail'
+
+/**
+ * The art-forward grid tile used by /cards, /add and /collection -- a real
+ * card's aspect ratio (2.5:3.5), filling the top of a panel, with whatever
+ * the caller passes as `children` (name, set, controls, ...) below it. This
+ * is the shape the old Softgen prototype's collection/cards grids used; the
+ * row-shaped CardThumbnail stays for places like the deck builder where a
+ * qty stepper needs to sit beside the art instead of under it.
+ */
+export function CardTile({
+  storageKey,
+  alt,
+  children,
+}: {
+  storageKey: string | null
+  alt: string
+  children?: React.ReactNode
+}) {
+  const [failed, setFailed] = useState(false)
+  const [enlarged, setEnlarged] = useState(false)
+  const hasImage = storageKey && !failed
+
+  return (
+    <div className="panel flex flex-col overflow-hidden">
+      <button
+        type="button"
+        onClick={() => hasImage && setEnlarged(true)}
+        disabled={!hasImage}
+        aria-label={hasImage ? `Enlarge ${alt}` : alt}
+        className="group relative block aspect-[2.5/3.5] w-full overflow-hidden bg-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-inset disabled:cursor-default"
+      >
+        {hasImage ? (
+          <Image
+            src={cardImageUrl(storageKey)}
+            alt={alt}
+            fill
+            sizes="(min-width: 1280px) 16vw, (min-width: 768px) 22vw, 45vw"
+            className="object-cover transition-transform group-hover:scale-105"
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-slate-500">
+            {alt}
+          </span>
+        )}
+      </button>
+      {children && <div className="flex flex-1 flex-col gap-2 p-2.5">{children}</div>}
+      {enlarged && hasImage && (
+        <Lightbox src={cardImageUrl(storageKey)} alt={alt} onClose={() => setEnlarged(false)} />
+      )}
+    </div>
+  )
+}

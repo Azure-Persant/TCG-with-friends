@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { addCards } from './actions'
-import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { CardTile } from '@/app/_components/card-tile'
 
 /** Worst to best is the order people actually think in when grading. */
 const CONDITIONS = ['MINT', 'NM', 'LP', 'MP', 'HP', 'DMG'] as const
@@ -56,24 +56,22 @@ export function AddForm({
   }
 
   return (
-    <li className="panel p-4">
-      <div className="flex items-center gap-3">
-        <CardThumbnail storageKey={imageStorageKey} alt={cardName} />
-        <div className="flex flex-col gap-0.5">
-          <span className="font-medium">{cardName}</span>
-          <span className="text-xs text-slate-400">
-            {setName ?? 'Unknown set'}
-            {collectorNumber ? ` · #${collectorNumber}` : ''}
-          </span>
-        </div>
+    <CardTile storageKey={imageStorageKey} alt={cardName}>
+      <div>
+        <p className="truncate text-sm font-medium">{cardName}</p>
+        <p className="truncate text-xs text-slate-400">
+          {setName ?? 'Unknown set'}
+          {collectorNumber ? ` · #${collectorNumber}` : ''}
+        </p>
       </div>
 
-      <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2">
-        <Field label="Finish">
+      <form onSubmit={submit} className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           <select
             value={finish}
             onChange={(e) => setFinish(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
+            aria-label="Finish"
+            className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
           >
             {available.map((f) => (
               <option key={f} value={f}>
@@ -81,13 +79,11 @@ export function AddForm({
               </option>
             ))}
           </select>
-        </Field>
-
-        <Field label="Condition">
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
+            aria-label="Condition"
+            className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
           >
             {CONDITIONS.map((c) => (
               <option key={c} value={c}>
@@ -95,57 +91,47 @@ export function AddForm({
               </option>
             ))}
           </select>
-        </Field>
+        </div>
 
-        <Field label="Box">
-          <select
-            value={locationId}
-            onChange={(e) => setLocationId(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
-          >
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name ?? 'Unnamed'}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <select
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+          aria-label="Box"
+          className="w-full rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
+        >
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name ?? 'Unnamed'}
+            </option>
+          ))}
+        </select>
 
-        <Field label="Qty">
+        <div className="flex gap-1.5">
           <input
             type="number"
             min={1}
             max={999}
             value={qty}
             onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-            className="w-16 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
+            aria-label="Quantity"
+            className="w-12 rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
           />
-        </Field>
-
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-        >
-          {pending ? 'Adding…' : 'Add'}
-        </button>
+          <button
+            type="submit"
+            disabled={pending}
+            className="flex-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {pending ? 'Adding…' : 'Add'}
+          </button>
+        </div>
       </form>
 
-      {done && <p className="mt-2 text-sm text-green-700 dark:text-green-400">{done}</p>}
+      {done && <p className="text-xs text-green-400">{done}</p>}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-400">
+        <p role="alert" className="text-xs text-red-400">
           {error}
         </p>
       )}
-    </li>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-slate-400">{label}</span>
-      {children}
-    </label>
+    </CardTile>
   )
 }

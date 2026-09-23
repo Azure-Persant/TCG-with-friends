@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { CardTile } from '@/app/_components/card-tile'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,23 +80,25 @@ export default async function CollectionPage() {
               {group.rows.reduce((n, r) => n + r.qty, 0)} cards
             </span>
           </h2>
-          <ul className="mt-2 divide-y divide-white/10">
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {group.rows.map((row, i) => (
-              <li key={i} className="flex items-center gap-3 py-2 text-sm">
-                <CardThumbnail
-                  storageKey={
-                    row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
-                  }
-                  alt={row.card_edition?.card?.name ?? 'Unknown card'}
-                />
-                <span className="w-8 tabular-nums text-slate-400">{row.qty}×</span>
-                <span className="font-medium">{row.card_edition?.card?.name ?? 'Unknown card'}</span>
-                <span className="text-xs text-slate-400">
+              <CardTile
+                key={i}
+                storageKey={
+                  row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
+                }
+                alt={row.card_edition?.card?.name ?? 'Unknown card'}
+              >
+                <p className="truncate text-sm font-medium">
+                  <span className="tabular-nums text-slate-400">{row.qty}×</span>{' '}
+                  {row.card_edition?.card?.name ?? 'Unknown card'}
+                </p>
+                <p className="text-xs text-slate-400">
                   {row.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {row.condition}
-                </span>
-              </li>
+                </p>
+              </CardTile>
             ))}
-          </ul>
+          </div>
         </section>
       ))}
     </div>

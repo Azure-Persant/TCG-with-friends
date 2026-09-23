@@ -69,6 +69,7 @@ export function TopNav(props: Props) {
                   { label: 'Add Cards', href: '/add' },
                   { label: 'Boxes', href: '/locations' },
                   { label: 'Lend', href: '/lend' },
+                  { label: 'Share', href: '/collection/share' },
                 ]}
               />
               <Link href="/cards" className={navLink}>

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { supabaseEnv } from './env'
 
 /** Paths reachable without being signed in. */
-const PUBLIC_PATHS = ['/login', '/auth', '/cards']
+const PUBLIC_PATHS = ['/login', '/auth', '/cards', '/shared']
 
 /**
  * Exact-match public paths -- "/" cannot go in PUBLIC_PATHS above, since that

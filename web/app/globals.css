@@ -24,6 +24,27 @@
   --color-primary: var(--primary);
   --font-sans: var(--font-work-sans);
   --font-heading: var(--font-jakarta);
+
+  /* Foil card art treatment (38) -- see the keyframes below for what each
+     one does. Naming them here is what turns them into the Tailwind
+     utilities `animate-foil-shift` / `animate-foil-sweep`. */
+  --animate-foil-shift: foil-shift 6s ease-in-out infinite;
+  --animate-foil-sweep: foil-sweep 1.8s linear infinite;
+}
+
+/* The static rainbow drifts its hues slowly, so a foil card is never quite
+   the same colour twice and the tint does not read as a printed gradient. */
+@keyframes foil-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* The band of colour that travels across a foil card as it catches the
+   light. Starts and ends clear of the card, so it reads as a pass rather
+   than a pulse. */
+@keyframes foil-sweep {
+  0%   { transform: translateX(-110%) skewX(-12deg); }
+  100% { transform: translateX(310%) skewX(-12deg); }
 }
 
 body {

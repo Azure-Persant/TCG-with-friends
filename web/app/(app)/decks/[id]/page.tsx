@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { isRestricted } from '@/lib/legality'
 import { DeckHeader } from './deck-header'
 import { AddCardSearch } from './add-card-search'
 import { DeckCardRow, type Row } from './deck-card-row'
@@ -14,7 +15,7 @@ type DeckCardQuery = {
   edition_id: string
   card_edition: {
     collector_number: string | null
-    card: { name: string } | null
+    card: { name: string; attributes: Record<string, unknown> } | null
     card_set: { name: string } | null
     card_image: { storage_key: string; variant: string }[] | null
   } | null
@@ -44,7 +45,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
       .select(
         `id, section, finish, qty, edition_id,
          card_edition ( collector_number,
-           card ( name ),
+           card ( name, attributes ),
            card_set ( name ),
            card_image ( storage_key, variant ) )`,
       )
@@ -84,6 +85,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
     imageStorageKey:
       c.card_edition?.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null,
     owned: owned.get(`${c.edition_id}:${c.finish}`) ?? 0,
+    restricted: isRestricted(c.card_edition?.card?.attributes),
   }))
 
   const missingTotal = rows.reduce((n, r) => n + Math.max(0, r.qty - r.owned), 0)

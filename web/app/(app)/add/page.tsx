@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { isRestricted } from '@/lib/legality'
 import { AddForm } from './add-form'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +55,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
       // join problem, so the join type is doing real work here.
       .select(
         `id, collector_number,
-         card!inner ( name ),
+         card!inner ( name, attributes ),
          card_set ( name, prefix ),
          card_edition_finish ( finish ),
          card_image ( storage_key, variant )`,
@@ -115,6 +116,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
             collectorNumber={ed.collector_number}
             finishes={(ed.card_edition_finish ?? []).map((f) => f.finish)}
             imageStorageKey={ed.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null}
+            restricted={isRestricted(ed.card?.attributes)}
             locations={locations}
           />
         ))}
@@ -126,7 +128,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
 type Edition = {
   id: string
   collector_number: string | null
-  card: { name: string } | null
+  card: { name: string; attributes: Record<string, unknown> } | null
   card_set: { name: string; prefix: string } | null
   card_edition_finish: { finish: string }[] | null
   card_image: { storage_key: string; variant: string }[] | null

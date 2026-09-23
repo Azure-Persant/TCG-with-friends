@@ -95,6 +95,7 @@ export function TopNav(props: Props) {
             items={[
               { label: 'Inbox', href: '/inbox', badge: props.pending },
               { label: 'Friends', href: '/friends' },
+              { label: 'Profile', href: '/profile' },
               { label: 'Game Selection', href: '/' },
             ]}
             footer={

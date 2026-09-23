@@ -202,6 +202,13 @@ CREATE TABLE account (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email         citext NOT NULL UNIQUE,
   display_name  text NOT NULL,
+
+  -- Enforced here as well as in app_set_display_name (40), same reasoning as
+  -- the username shape check below: a name is shown to friends often enough
+  -- that a blank or absurdly long one should be impossible to store.
+  CONSTRAINT account_display_name_shape CHECK (
+    length(btrim(display_name)) BETWEEN 1 AND 60),
+
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
 
@@ -764,7 +771,14 @@ SELECT 'class', t, count(DISTINCT c.id)
 --
 -- No SECURITY DEFINER: catalog tables are already world-readable (RLS
 -- `USING (true)`), so this runs with the caller's own rights.
-CREATE OR REPLACE FUNCTION search_card_editions(
+--
+-- Dropped and recreated, not CREATE OR REPLACE: Postgres refuses to change
+-- an existing function's RETURNS TABLE column list in place, and `restricted`
+-- (39) is a new one.
+DROP FUNCTION IF EXISTS search_card_editions(
+  text, text[], text[], text[], text[], integer, integer, integer, integer, integer);
+
+CREATE FUNCTION search_card_editions(
   p_query         text    DEFAULT NULL,
   p_elements      text[]  DEFAULT NULL,
   p_types         text[]  DEFAULT NULL,
@@ -787,7 +801,8 @@ RETURNS TABLE (
   element              text,
   types                text[],
   subtypes             text[],
-  classes              text[]
+  classes              text[],
+  restricted           boolean
 )
 LANGUAGE sql STABLE AS $$
   SELECT
@@ -802,7 +817,13 @@ LANGUAGE sql STABLE AS $$
     c.attributes ->> 'element',
     array(SELECT jsonb_array_elements_text(coalesce(c.attributes -> 'types', '[]'::jsonb))),
     array(SELECT jsonb_array_elements_text(coalesce(c.attributes -> 'subtypes', '[]'::jsonb))),
-    array(SELECT jsonb_array_elements_text(coalesce(c.attributes -> 'classes', '[]'::jsonb)))
+    array(SELECT jsonb_array_elements_text(coalesce(c.attributes -> 'classes', '[]'::jsonb))),
+    -- Same field app_set_deck_card already enforces on (n. in the invariants
+    -- list below) -- limit 0 is the only value seen in the live catalog today
+    -- (see HANDOFF.md, #8), but this reads "= 0" rather than "IS NOT NULL" so
+    -- a future non-zero restriction (fewer than 4 copies allowed, say) does
+    -- not silently start showing the full-ban badge on a merely-limited card.
+    (c.attributes -> 'legality' -> 'STANDARD' ->> 'limit') = '0'
   FROM card_edition ce
     JOIN card     c  ON c.id = ce.card_id
     JOIN card_set cs ON cs.id = ce.set_id

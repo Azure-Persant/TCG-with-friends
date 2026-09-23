@@ -524,6 +524,30 @@ EXCEPTION WHEN unique_violation THEN
   RAISE EXCEPTION 'That username is taken.' USING ERRCODE = 'unique_violation';
 END $$;
 
+/**
+ * Change your display name (40) -- unlike username (33), there is no
+ * uniqueness rule and no one-time welcome-flow restriction; this is just
+ * editing a value, so the function is nearly all validation.
+ */
+CREATE OR REPLACE FUNCTION app_set_display_name(p_display_name text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE v_clean text := btrim(p_display_name);
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not signed in'; END IF;
+
+  IF length(v_clean) NOT BETWEEN 1 AND 60 THEN
+    RAISE EXCEPTION 'A display name must be 1 to 60 characters.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  UPDATE account SET display_name = v_clean, updated_at = now()
+   WHERE id = auth.uid();
+END $$;
+
 /** Which game's nav/collection you're currently looking at -- the "Select
  *  Your Game" landing page calls this when you click a game tile. */
 CREATE OR REPLACE FUNCTION app_set_selected_game(p_game uuid) RETURNS void
@@ -1493,6 +1517,7 @@ BEGIN
     'app_send_friend_request(uuid,text)',
     'app_find_account(text)',
     'app_set_username(text)',
+    'app_set_display_name(text)',
     'app_set_selected_game(uuid)',
     'app_offer_loan(jsonb,uuid,text)',
     'app_request_borrow(jsonb,uuid,text)',

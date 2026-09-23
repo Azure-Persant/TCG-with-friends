@@ -14,6 +14,7 @@ export function AddForm({
   collectorNumber,
   finishes,
   imageStorageKey,
+  restricted,
   locations,
 }: {
   editionId: string
@@ -22,6 +23,7 @@ export function AddForm({
   collectorNumber: string | null
   finishes: string[]
   imageStorageKey: string | null
+  restricted: boolean
   locations: { id: string; name: string | null }[]
 }) {
   // A printing that exists only in foil should not offer nonfoil (21).
@@ -56,7 +58,12 @@ export function AddForm({
   }
 
   return (
-    <CardTile storageKey={imageStorageKey} alt={cardName}>
+    <CardTile
+      storageKey={imageStorageKey}
+      alt={cardName}
+      foil={finish === 'FOIL'}
+      restricted={restricted}
+    >
       <div>
         <p className="truncate text-sm font-medium">{cardName}</p>
         <p className="truncate text-xs text-slate-400">

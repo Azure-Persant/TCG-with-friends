@@ -292,15 +292,23 @@ function GoogleMark() {
 
 function Shell({ children }: { children?: React.ReactNode }) {
   return (
-    <main className="app-backdrop mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-slate-100">
-      <h1 className="font-heading text-2xl font-bold tracking-tight text-accent">Card inventory</h1>
-      <p className="mt-2 text-sm text-slate-400">
-        Keep track of what you own, what you have lent out, and who still has it.
-      </p>
-      {children}
-      <Link href="/cards" className="mt-8 text-center text-sm text-slate-400 underline">
-        Just want to browse the cards? No sign-in needed.
-      </Link>
-    </main>
+    // The gradient goes on this outer, full-width div -- not on the
+    // max-w-md column below, which used to carry `app-backdrop` directly
+    // and left the gradient itself constrained to that narrow width, with
+    // plain black filling the rest of the viewport on anything wider than
+    // a phone. Same two-layer shape as /cards and the (app) layout: a
+    // full-bleed backdrop with a centered content column inside it.
+    <div className="app-backdrop flex min-h-dvh flex-col justify-center">
+      <main className="mx-auto flex w-full max-w-md flex-col px-6 text-slate-100">
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-accent">Card inventory</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          Keep track of what you own, what you have lent out, and who still has it.
+        </p>
+        {children}
+        <Link href="/cards" className="mt-8 text-center text-sm text-slate-400 underline">
+          Just want to browse the cards? No sign-in needed.
+        </Link>
+      </main>
+    </div>
   )
 }

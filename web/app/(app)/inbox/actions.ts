@@ -16,27 +16,37 @@ export type ActionResult = { ok: true } | { ok: false; error: string }
  */
 export async function acceptRequest(formData: FormData): Promise<ActionResult> {
   const requestId = String(formData.get('requestId') ?? '')
-  const originLocationId = String(formData.get('originLocationId') ?? '')
+  const originsRaw = String(formData.get('origins') ?? '')
   if (!requestId) return { ok: false, error: 'Missing request' }
 
   const supabase = await createClient()
 
   // A borrow request carries no origin -- the borrower does not know which box
-  // the card is in, and (14) says they must not. The owner supplies it here.
+  // the card is in, and (14) says they must not. The owner supplies one per
+  // card here (12), not one for the whole request. The client only chooses
+  // WHICH location per item id; edition_id/finish are re-read from the
+  // request's own rows rather than trusted from the client, same as every
+  // other mutation in this app going through an RPC that re-validates anyway
+  // -- this just avoids shipping data back that the server already has.
   let data: unknown = null
-  if (originLocationId) {
+  if (originsRaw) {
+    const chosen: { id: string; locationId: string }[] = JSON.parse(originsRaw)
+    const ids = chosen.map((c) => c.id)
+
     const { data: items, error } = await supabase
       .from('request_loan_item')
-      .select('edition_id, finish')
+      .select('id, edition_id, finish')
       .eq('request_id', requestId)
+      .in('id', ids)
 
     if (error) return { ok: false, error: error.message }
 
+    const locationById = new Map(chosen.map((c) => [c.id, c.locationId]))
     data = {
       origins: (items ?? []).map((i) => ({
         edition_id: i.edition_id,
         finish: i.finish,
-        origin_location_id: originLocationId,
+        origin_location_id: locationById.get(i.id),
       })),
     }
   }

@@ -1,9 +1,10 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { CardTile } from '@/app/_components/card-tile'
+import { CollectionGrid, type Group } from './collection-grid'
 
 export const dynamic = 'force-dynamic'
 
-type Row = {
+type HoldingRow = {
   qty: number
   condition: string
   finish: string
@@ -34,22 +35,28 @@ export default async function CollectionPage() {
     return <ErrorBox message={error.message} />
   }
 
-  const rows = (data ?? []) as unknown as Row[]
+  const holdings = (data ?? []) as unknown as HoldingRow[]
 
-  if (rows.length === 0) {
+  if (holdings.length === 0) {
     return (
-      <Empty
-        title="Nothing here yet"
-        body="Once you add cards they will show up grouped by where you keep them."
-      />
+      <>
+        <Header uniqueCards={0} totalCards={0} />
+        <Empty
+          title="Nothing here yet"
+          body="Once you add cards they will show up grouped by where you keep them."
+        />
+      </>
     )
   }
 
   // Group by location. Holder locations are where lent-out cards live (10), so
   // they are listed separately -- those are yours but not in your hands.
-  const groups = new Map<string, { name: string; isHolder: boolean; rows: Row[] }>()
-  for (const row of rows) {
-    const loc = row.location
+  const groups = new Map<string, Group>()
+  const uniqueCardNames = new Set<string>()
+  let totalCards = 0
+
+  for (const h of holdings) {
+    const loc = h.location
     const key = loc?.id ?? 'unknown'
     if (!groups.has(key)) {
       groups.set(key, {
@@ -58,7 +65,16 @@ export default async function CollectionPage() {
         rows: [],
       })
     }
-    groups.get(key)!.rows.push(row)
+    const cardName = h.card_edition?.card?.name ?? 'Unknown card'
+    groups.get(key)!.rows.push({
+      qty: h.qty,
+      condition: h.condition,
+      finish: h.finish,
+      cardName,
+      storageKey: h.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null,
+    })
+    uniqueCardNames.add(cardName)
+    totalCards += h.qty
   }
 
   const sorted = [...groups.values()].sort(
@@ -67,43 +83,56 @@ export default async function CollectionPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      {sorted.map((group) => (
-        <section key={group.name}>
-          <h2 className="flex items-baseline gap-2 text-sm font-semibold">
-            {group.name}
-            {group.isHolder && (
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                with someone else
-              </span>
-            )}
-            <span className="ml-auto text-xs font-normal text-slate-400">
-              {group.rows.reduce((n, r) => n + r.qty, 0)} cards
-            </span>
-          </h2>
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {group.rows.map((row, i) => (
-              <CardTile
-                key={i}
-                storageKey={
-                  row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
-                }
-                alt={row.card_edition?.card?.name ?? 'Unknown card'}
-              >
-                <p className="truncate text-sm font-medium">
-                  {row.card_edition?.card?.name ?? 'Unknown card'}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {row.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {row.condition}
-                </p>
-                <span className="mt-auto inline-flex h-8 items-center justify-center rounded-md border border-cyan-500 text-xs font-medium text-cyan-400">
-                  Total: {row.qty}
-                </span>
-              </CardTile>
-            ))}
-          </div>
-        </section>
-      ))}
+      <Header uniqueCards={uniqueCardNames.size} totalCards={totalCards} />
+      <CollectionGrid groups={sorted} />
     </div>
+  )
+}
+
+function Header({ uniqueCards, totalCards }: { uniqueCards: number; totalCards: number }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="font-heading text-4xl font-bold text-white">My Collection</h1>
+        <div className="mt-3 flex items-center gap-2 text-slate-300">
+          <PackageIcon className="h-5 w-5 text-cyan-400" />
+          <span>
+            <span className="font-semibold text-white">{uniqueCards}</span> unique cards
+          </span>
+          <span className="text-slate-500">·</span>
+          <span>
+            <span className="font-semibold text-white">{totalCards}</span> total cards
+          </span>
+        </div>
+      </div>
+      <Link
+        href="/add"
+        className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+      >
+        <PlusIcon className="h-4 w-4" />
+        Add Cards
+      </Link>
+    </div>
+  )
+}
+
+function PackageIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="m7.5 4.27 9 5.15" />
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  )
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
   )
 }
 

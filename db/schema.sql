@@ -70,6 +70,10 @@ CREATE TYPE loan_close_reason AS ENUM (
 
 CREATE TYPE sync_status AS ENUM ('running', 'succeeded', 'failed');
 
+-- A deck's three lists (issue #21), per the Standard Constructed rules at
+-- https://rules.gatcg.com/general-rules/general-rules-format-conventions.
+CREATE TYPE deck_section AS ENUM ('material', 'main', 'sideboard');
+
 -- ===========================================================================
 -- CATALOG (12, 16)
 --
@@ -333,6 +337,49 @@ CREATE TABLE holding (
 
 CREATE INDEX holding_account_edition_idx ON holding (account_id, edition_id);
 CREATE INDEX holding_location_idx        ON holding (location_id);
+
+-- ===========================================================================
+-- DECKS (issue #21)
+--
+-- Unlike a holding, a deck row is scoped by PRINTING (edition_id), not just
+-- card, so the builder can pick specific art -- but the Standard Constructed
+-- copy limits (4 per name in main+sideboard, 1 in material+sideboard) are per
+-- CARD NAME, summed across every edition and finish of it. That sum has to be
+-- computed, so it lives in app_set_deck_card (db/functions.sql), not a CHECK
+-- constraint -- Postgres CHECK constraints see one row at a time.
+-- ===========================================================================
+
+CREATE TABLE deck (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX deck_account_idx ON deck (account_id);
+
+-- No qty-positive-or-deleted convention here (8) -- app_set_deck_card deletes
+-- the row itself on qty = 0, same idea, enforced the same way holding is.
+CREATE TABLE deck_card (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  deck_id     uuid NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
+  edition_id  uuid NOT NULL REFERENCES card_edition(id) ON DELETE RESTRICT,
+  section     deck_section NOT NULL,
+  finish      card_finish NOT NULL DEFAULT 'NONFOIL',
+  qty         integer NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT deck_card_qty_positive CHECK (qty > 0),
+
+  FOREIGN KEY (edition_id, finish)
+    REFERENCES card_edition_finish (edition_id, finish) ON DELETE RESTRICT,
+
+  UNIQUE (deck_id, edition_id, section, finish)
+);
+
+CREATE INDEX deck_card_deck_idx    ON deck_card (deck_id);
+CREATE INDEX deck_card_edition_idx ON deck_card (edition_id);
 
 -- ===========================================================================
 -- LOANS (2, 3, 5, 6, 7, 10, 11, 13, 15, 18, 19, 20)
@@ -809,4 +856,12 @@ END $$;
 --          does. Each side settles independently; neither moves on acceptance.
 --  m. (27) A listing never gates a request. It only decides whether the
 --          owner's notification carries an "not offered" warning.
+--  n. (21) Deck copy limits (4 main, 1 material, both pooled with sideboard
+--          rows of the same card and tightened by attributes->legality-
+--          >STANDARD->limit) and section caps (12 material, 15 sideboard
+--          cards/points) are rejected outright in app_set_deck_card. The
+--          60-card main-deck minimum and the Level 0 champion requirement are
+--          never enforced -- see the comment above app_set_deck_card for why
+--          a floor can only ever be a display fact (deck_summary), not
+--          something a mutation can be rejected over.
 -- ===========================================================================

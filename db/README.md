@@ -23,7 +23,7 @@ npm install
 # Local development — adds the auth shim
 npm run apply:local -- --url "postgresql://localhost/fci"
 
-# Local, and run the five test suites afterwards
+# Local, and run the six test suites afterwards
 npm test -- --url "postgresql://localhost/fci"
 
 # Show the plan without changing anything
@@ -141,7 +141,7 @@ anything that isn't `--local`.
 
 ## Tests
 
-Five suites, 68 assertions, all rolled back at the end so they change nothing:
+Six suites, all rolled back at the end so they change nothing:
 
 | Suite | Covers |
 |---|---|
@@ -150,6 +150,7 @@ Five suites, 68 assertions, all rolled back at the end so they change nothing:
 | `tests/rpc_smoke.sql` | A whole loan lifecycle through the RPCs |
 | `tests/request_smoke.sql` | Requests, trades, counter-offers, listings |
 | `tests/auth_smoke.sql` | The `auth.users` → `account` bridge |
+| `tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, and RLS on `deck`/`deck_card` |
 
 ```bash
 npm test -- --url "postgresql://localhost/fci"

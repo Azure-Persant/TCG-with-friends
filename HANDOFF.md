@@ -4,14 +4,21 @@ Everything established so far, for whoever picks this up next — including a
 future me.
 
 **Status:** design settled, database built, migrated and tested, all mutations
-implemented as Postgres functions, catalog ingest working, and a Next.js app
-with working auth covering sign-in, your collection, the request inbox, and
-now the friends/lending UI itself — adding a friend, sharing a game, offering
-a loan.
+implemented as Postgres functions, catalog **imported for real** (63 sets,
+~2,500 cards, ~4,900 editions) with images backfilled to Supabase Storage, and
+a Next.js app covering sign-in, a public catalog browser with filters, your
+collection, the request inbox, the friends/lending UI, and a deck builder —
+all live in production.
 
 Loans, borrows, trades, friend requests and sub-loans are all implemented and
 tested, reachable from the app rather than only from the RPCs. Everyone gets a
 username (33) and a default "Unsorted" box (34) on signup.
+
+The visual design was redone to match the retired Softgen prototype's actual
+look (§8) after the first pass fell short of it twice, and the nav/landing
+page were restructured around a "Select Your Game" page and a per-account
+`selected_game_id` (§9) — the first place the app itself is aware of the
+game axis that was always latent in the schema.
 
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
@@ -48,6 +55,21 @@ real unmerged work from that repo (the friends/lending UI, usernames, a
 default box — decisions 33 and 34) was reconciled in on top. Both repos'
 stale branches were deleted. `JonCorrea/friends-card-inventory` is now
 archived — read-only, kept around only until it's deleted outright.
+
+**The Softgen *app*, however, is still actively useful — as a design
+reference, not as code to run.** A local clone of it (the same repo the
+paragraph above describes as retired) sits at
+`/Users/jon.correa/Projects/sg-e300915b-f09d-430b-87c3-1c85baec61a4-1777483298`,
+outside this repo, and turned out to have real design/UX maturity this
+project's own rebuild hadn't reached yet — a polished dark/purple visual
+theme, a filterable catalog browser, and a deck builder UI, among other
+things. §8 and §9 below, and issues #25 and #32–#41, all came from reading
+its actual source (components, pages, Tailwind config) rather than
+re-guessing from memory or screenshots. Its *data model* is not a reference —
+its single-user, no-real-lending schema is exactly what decision 32 replaced,
+and its numeric deck-legality rules turned out to be unsourced guesses (§9.1)
+— but its UI/UX choices are worth reading before building anything this
+project doesn't have yet.
 
 ---
 
@@ -195,7 +217,7 @@ setting. Supabase reads the `sub` claim out of `request.jwt.claims`. So the
 project's entire privacy model had been proven against a function that did not
 resemble the one it would run against.
 
-The shim now implements the real formula, and all five suites drive it through
+The shim now implements the real formula, and all six suites drive it through
 forged JWT claims. Everything still passed — but that was a coin-flip, not a
 result, and it is the sort of gap that surfaces in production as "why is
 everything empty".
@@ -251,17 +273,26 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/rpc_smoke.sql` | Full loan lifecycle through the RPCs, as an unprivileged role. |
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
-| `db/auth_bridge.sql` | Provisions an account per auth user (31). |
+| `db/tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, RLS (§8). |
+| `db/auth_bridge.sql` | Provisions an account per auth user (31), defaults `selected_game_id` (§9.2). |
 | `db/apply.mjs` | Builds a throwaway local/CI database from the files above. |
 | `supabase/migrations/` | The deployable history. Applied to the live project with `supabase db push` (32). |
-| `web/` | Next.js app: login, collection, inbox. |
+| `web/app/page.tsx` | "Select Your Game" landing page (§9.2). |
+| `web/app/cards/page.tsx` | Public catalog browser with filters — no account needed. |
+| `web/app/(app)/decks/`, `.../decks/[id]/` | The deck builder (§8). |
+| `web/app/_components/top-nav.tsx`, `nav-menu.tsx` | The shared nav bar and its hand-rolled dropdowns (§9.3). |
+| `web/app/_components/card-tile.tsx`, `card-thumbnail.tsx` | The two card-art shapes: grid tile vs. row thumbnail. |
+| `web/app/_components/filter-bar.tsx` | The `/cards`+`/add` element/type/subtype/class/cost filter UI. |
 | `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
+| `.github/workflows/ci.yml` | Tests, plus the schema-files-vs-migrations drift guard (§7). |
 | `.claude/skills/` | Matt Pocock's skills, installed as editable copies. |
-| `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). |
+| `ingest/` | GATCG catalog + image worker. TypeScript, one dependency (`pg`). Already run for real — see §6. |
 | `docs/data/editions_missing_circulation.csv` | The 636 editions with no upstream finish data. |
 
-Verified against PostgreSQL 16: schema applies clean, all five test suites
-pass, and the ingest ran end-to-end against a real database.
+Verified against PostgreSQL 16: schema applies clean, all six test suites
+pass, the migration-vs-schema-files drift guard is clean, and the ingest has
+run end-to-end against the real live database (not just a test one) — catalog
+and images are both populated for real, not placeholder data.
 
 ### Running it
 
@@ -343,31 +374,253 @@ collection counts and value totals. The borrower may assign one of their own
 locations to a card they're holding — that placement is their data; everything
 else about the card is the lender's.
 
+**The migration drift guard checks text, not just behavior.** CI's "Migrations
+match the schema files" job (`.github/workflows/ci.yml`) builds one database
+from `schema.sql`+friends and another from `supabase/migrations/`, then diffs
+`pg_dump --schema-only` of both. Postgres stores a function's body as the
+literal source text, so a comment present in `functions.sql` but missing from
+the migration's copy of that same `CREATE OR REPLACE FUNCTION` is a real,
+CI-failing diff — not a cosmetic nit. Copy function bodies into a migration
+verbatim, comments included, or verify locally before pushing (§8's commits
+show the exact local reproduction: apply both paths to throwaway databases,
+`pg_dump` both, `diff`).
+
+**PostgREST has no good operator for "OR within a jsonb array, AND across
+several."** `ov`/`cs` (overlap/contains) only work on native Postgres array
+and range columns, not on values inside a `jsonb` column — which is where
+this project's per-game card attributes deliberately live (16), since a
+second game's stat line needs no migration. `search_card_editions` and
+`app_set_deck_card`'s legality checks (§8) both exist because of this: once
+the filtering logic needs real boolean combinations over jsonb array
+membership, it has to be a Postgres function, not a PostgREST embedded-table
+query.
+
+**Forcing a permanently-dark Tailwind v4 theme is a two-line, whole-app
+lever.** `@custom-variant dark (&:where(.dark, .dark *));` in `globals.css`
+plus `className="dark"` on `<html>` in `app/layout.tsx` makes every `dark:`
+utility already written throughout the app (from when it followed the OS
+preference) apply unconditionally. If this app ever needs a light theme back,
+that pair of lines is where to start un-forcing it — not a rewrite of every
+page's classes.
+
+**A dropdown's own "close on click" can race a native form's submission.**
+The account menu's Sign out button lived inside a wrapper `<div
+onClick={() => setOpen(false)}>`. Clicking it fired that handler synchronously
+on the bubbled click, unmounting the whole open dropdown — the `<form>`
+included — before the browser's native form submission (a plain POST, no JS)
+had fired. The click registered and did nothing. The fix was simply not
+closing the menu by hand there: the form's own `action` navigates the page
+away regardless, so there was nothing to close. Any native `<form>` (not a
+`next/link` or a client-side handler) inside conditionally-rendered UI is
+worth checking for this.
+
+**A blank-looking screenshot isn't proof of a bug.** A grid of card images
+once rendered as flat slate rectangles in one screenshot and correctly in the
+next, with nothing in between but a `wait`. Before treating that as a real
+issue, check the DOM directly (`naturalWidth`, `complete`, computed
+`opacity`/`position`) — it was a browser paint-timing artifact in the
+screenshot tool, not a rendering bug, and the DOM was correct the whole time.
+
 ---
 
-## 8. Next steps
+## 8. Deck builder (#21, closed)
 
-Done: auth wiring, inventory entry (`/add`, `/locations`), and loan flows
-— `/lend` and `/friends` put a UI over the RPCs that used to be reachable only
-from a script.
+Not a port of the Softgen prototype's deck tables. That schema (`decks`,
+`deck_cards`) was never enforced at the database level — legality was
+computed for display only, and the numeric rules behind it (12/60/15/4/1)
+weren't cited to anything. This project's version is built against its own
+`card`/`card_edition`/`holding` model, with rules sourced from the official
+[Standard Constructed rules](https://rules.gatcg.com/general-rules/general-rules-format-conventions):
 
-**Open work is tracked as GitHub issues**, not in this file: catalog import,
-per-card borrow origins, verifying email sign-in, custom SMTP, removing the
-sample cards, and card images. This file explains the project; the issues
-track what is left.
+- **Main deck**: minimum 60 cards, max 4 copies of a card name
+- **Material deck**: max 12 cards, max 1 copy of a card name, needs a Level 0
+  champion — only Champion/Regalia cards go here
+- **Sideboard**: max 15 cards **and** max 15 points (1pt main-type, 3pt
+  Champion/Regalia)
+- Sideboard copies pool with their type's copy limit — confirmed with the
+  user as the intended reading, since the rules page itself doesn't spell out
+  this specific edge case
+- A card whose `attributes->legality->STANDARD->limit` is `0` is banned —
+  read live from the ingested catalog (the shape was confirmed against real
+  data: 149 of ~2,500 cards carry a `STANDARD` override today, all `limit: 0`
+  — no partial-restriction values exist yet) rather than a hardcoded name
+  list, so this stays correct if the restricted list ever gains a non-zero
+  entry without anyone touching this code
 
-**Notifications** are the largest remaining gap, and (23) has changed its shape
-for the better: there is now exactly one table to watch and one place to
-emit from, rather than five. Every flow assumes something tells the other
-person; nothing does yet.
+**Enforcement split, decided deliberately, not a shortcut:** only the upper
+bounds above (`app_set_deck_card` in `db/functions.sql`) are rejected
+outright. The 60-card minimum and the champion requirement are *never*
+enforced by any mutation — every deck starts at 0 cards, so a floor can only
+ever be a display fact (`deck_summary`'s "Legal" / "N rule issues" badge),
+never something to reject a write over. Removing a card (`qty = 0`) always
+succeeds, unconditionally — there's no legitimate reason to ever block that.
 
-**The app never touches money (29).** A sale listing is an intent marker with
-an optional asking price; people settle via PayPal, Zelle, Venmo or cash on
-their own. Do not add orders, payments or a sold state — that turns this into
-a marketplace, which owes users dispute handling, refunds, chargeback
-exposure and money-transmission compliance, none of which makes knowing where
-your cards are work any better.
-5. **Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
-   since it's already keyed the way prices are quoted.
+`db/tests/deck_smoke.sql` exercises every rule above end to end, as an
+unprivileged role, with every assertion's `NOTICE` output inspected directly
+(not just the suite's overall pass/fail) before being trusted.
 
-Nothing is blocked. There are no open design questions.
+**Deferred, filed as their own issues rather than half-built here:**
+deck cover art (#32), decklist paste/export (#33), public deck showcase
+(#34), deck sharing via link (#35), deck duplication (#36), per-deck-card
+foil/printing swap (#37), the foil shimmer visual treatment anywhere in the
+app (#38), and surfacing the restricted-card badge in the UI (#39) — the
+retired Softgen prototype had all of these; this project's deck builder
+intentionally shipped without them so the legality engine could be gotten
+right first.
+
+## 9. Visual design, navigation and game selection
+
+### 9.1 The visual redesign took three passes to actually land
+
+Worth recording because the shape of the miss is more useful than the
+outcome: **two rounds of user feedback each caught something the previous
+round missed**, and both misses came from working off *memory of screenshots*
+rather than the reference's *actual source code*.
+
+1. First pass: matched colors/fonts/gradient from general impression. User's
+   reaction: "still not completely as it was before."
+2. Asked a direct yes/no ("is it the grid layout you're missing?") — correct
+   guess, but only because it was asked rather than assumed. Converted
+   `/cards`, `/add`, `/collection` from row lists to a responsive grid of
+   card-art tiles.
+3. User sent an actual screenshot of the reference's `/collection`. That
+   surfaced a "Total: N" / Edit-button tile footer and a stats-row page
+   header that a general design pass had no way to know about, because
+   they're specific, small UI facts, not a "vibe."
+
+**The lesson, acted on for #25/#32–#41:** when doing feature-parity or visual
+work against a reference app, read its actual component source
+(`Navigation.tsx`, the real Tailwind classes, the real DOM structure) before
+building — not a description of it, not a screenshot glanced at once. A
+dedicated research pass reading the reference's real files (§"Where this
+lives") caught the nav bar's exact structure, the collection tile's full
+footer, the deck list's big-art card shape, and `DeckSummaryBar`'s layout in
+one pass, each ported with the real classNames rather than approximated.
+
+**Real functionality gaps got filed as issues, not faked as UI.** The
+reference's collection tile has a bulk-select checkbox and a working Edit
+button; this app currently has **no way to reduce or delete a holding**
+at all (only `app_add_cards` and `app_move_cards`, same quantity, exist).
+Rather than add a checkbox/button that goes nowhere, that gap is #29 (edit/
+remove a holding) and #30 (bulk-select + move) — real RPCs and UI, tracked
+properly.
+
+**This app is now permanently dark** (see the new trap above, §7) — a
+deliberate simplification from following the OS preference, since the
+reference itself never had a light mode either.
+
+### 9.2 "Select Your Game" and `account.selected_game_id`
+
+The game axis (12, 16) was always in the schema via `card.game_id`, but
+nothing in the *app* was aware of it until now — there is exactly one game
+(Grand Archive), so nothing needed to ask. Added ahead of an actual second
+game existing, at the user's explicit request ("I will want to incorporate
+other games later on"):
+
+- `account.selected_game_id` (nullable FK to `game`, `ON DELETE SET NULL`) —
+  persisted server-side via `app_set_selected_game(uuid)`. New signups and
+  every pre-existing account default to whichever game was created first
+  (`app_provision_account`'s backfill), so nobody is ever stuck in a null
+  state today.
+- `/` is now "Select Your Game" — a page, not just a redirect — reachable
+  **signed in or out** ("if someone comes to the website for one game, I
+  want them to be able to choose that game instead of being thrown into
+  another game completely," direct quote). Signed out, the choice is a
+  cookie (`web/app/actions.ts`), since there's no account to persist it on.
+- `proxy.ts`'s session check needed a second, *exact-match* public-paths list
+  (`PUBLIC_EXACT_PATHS = ['/']`) — `/` cannot go in the existing
+  prefix-matched list, since every path starts with `/` and that would make
+  the whole app public.
+- The nav's logo now always links to `/`, not straight into `/collection` or
+  `/cards` — clicking it is how you get back to pick a different game, once
+  a second one exists.
+
+**Not built, deliberately:** actually filtering any query (holdings, decks,
+catalog search) by `selected_game_id`. With one game in the catalog, every
+query is implicitly single-game already, so wiring in a filter now would be
+untestable, unexercised code — the definition of the "no half-finished
+implementations" rule this project holds itself to. Revisit the day a second
+game's catalog is actually ingested.
+
+### 9.3 Nav restructure
+
+The flat link row became dropdown-based, via a small hand-rolled `NavMenu`
+component (`web/app/_components/nav-menu.tsx` — click-to-open, click-outside
+and Escape to close, no Radix in this codebase):
+
+- **Collection** (dropdown): Collection, Add Cards, Boxes, Lend
+- **Browse Cards** (renamed from "Browse")
+- **Decks**
+- **Friends** (dropdown): Friends, Lend — Lend is reachable from both
+  Collection and Friends on purpose, since it's equally an inventory action
+  and a relationship action
+- The signed-in **account menu** (username, top right): Inbox (with the
+  pending-request badge), Friends, Game Selection, then Sign out below a
+  divider — Inbox dropped off the top-level bar entirely
+
+`/cards` is reachable both signed in and signed out, which resurfaced a bug
+worth remembering: it used to always render the anonymous header regardless
+of session state, because the page never checked `auth.getUser()` — reading
+as "visiting Browse Cards logs you out," when the session was never actually
+touched. Fixed by extracting `TopNav` into one shared component both
+`/cards` and the `(app)` layout render from the same auth check, so the two
+surfaces can't drift apart again.
+
+---
+
+## 10. Next steps
+
+Done: auth wiring, catalog import + images + filters, inventory entry
+(`/add`, `/locations`), loan flows (`/lend`, `/friends`), a deck builder
+(§8), and the visual redesign + game-selection landing page (§9) — all live
+in production.
+
+**Open work is tracked as GitHub issues, not in this file.** As of
+2026-09-23, all open:
+
+*Carried over from before this session:*
+- **#12** — let the owner pick a different box per card when approving a
+  borrow request
+- **#13** — verify email-code sign-in works for a brand new account
+- **#14** — set up custom SMTP before inviting anyone (needed before a
+  second real person uses this — Supabase's built-in email is rate-limited
+  and testing-only)
+
+*Softgen-parity work, filed after reading its actual source (§9.1):*
+- **#22** — public collection sharing via read-only links
+- **#23** — card detail view (full text/stats, plus the "/cards merges
+  printings of the same card into one tile with a popup" behavior)
+- **#29** — edit or remove a holding (real gap: no way to decrease/delete
+  one today, only add and move)
+- **#30** — bulk-select and move cards on `/collection`
+- **#32**–**#39** — deck cover art, decklist import/export, public deck
+  showcase, deck sharing via link, deck duplication, per-deck-card foil/
+  printing swap, the foil shimmer visual treatment, restricted-card badge
+  (all detailed in §8)
+- **#40** — a profile/settings page to view and change your display name
+  (there's currently no way back to it after the one-time `/welcome` step)
+- **#41** — choose which printing represents a card on the collection grid
+  (low priority)
+
+**Notifications** are still the largest gap **not yet filed as an issue** —
+(23) already gives it the right shape: one `request` table to watch, one
+place to emit from, rather than five. Every flow assumes something tells the
+other person; nothing does yet. Worth its own issue before anyone relies on
+this with a friend who isn't checking the inbox proactively.
+
+**The app never touches money (29 — the *design decision*, not GitHub issue
+#29 above; the numbers collide by coincidence).** A sale listing is an intent
+marker with an optional asking price; people settle via PayPal, Zelle, Venmo
+or cash on their own. Do not add orders, payments or a sold state — that
+turns this into a marketplace, which owes users dispute handling, refunds,
+chargeback exposure and money-transmission compliance, none of which makes
+knowing where your cards are work any better.
+
+**Pricing**, if it ever comes — `card_edition_finish` is the natural hook,
+since it's already keyed the way prices are quoted.
+
+Nothing is blocked. There are no open design questions about the loan model
+itself (docs/design/friends-and-loans.md's own open questions, noted at its
+top, are pre-existing and unrelated to anything in this session). The deck
+sharing/showcase issues (#34, #35) do share groundwork worth designing
+together rather than separately — see the cross-reference in each.

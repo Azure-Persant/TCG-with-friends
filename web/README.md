@@ -153,28 +153,61 @@ hardcoded URL, so localhost, previews and production all work off one build.
 
 ## Trying it before the catalog import
 
-The Ingest catalog workflow fills the catalog from api.gatcg.com. Until it has
-run there is nothing to search for, so `/add` will find nothing.
+On a **fresh local/CI database**, `/add` finds nothing until the catalog is
+populated. Paste `../db/sample_cards.sql` into the SQL editor for four
+obviously-fake placeholder cards to develop against, or run the ingest worker
+for real data (`../ingest/README.md`).
 
-To try the UI now, paste `../db/sample_cards.sql` into the Supabase SQL editor.
-It adds four obviously-fake cards in a set called "Sample Set (placeholder
-data)" — deliberately not real card names, so nothing is mistaken for imported
-catalog data. The file ends with the SQL to remove them again.
+The **live Supabase project already has the real catalog** — 63 sets, ~2,500
+cards, ~4,900 editions, imported via `.github/workflows/ingest.yml` — and the
+placeholder cards have been removed from it. This section only applies when
+standing up a new database from empty.
+
+## Look and feel
+
+This app has **no light theme** — `app/globals.css` forces Tailwind's `dark`
+variant on unconditionally (`@custom-variant dark (&:where(.dark, .dark *))`
+plus `className="dark"` on `<html>` in `app/layout.tsx`), so every `dark:`
+utility already written throughout the app just applies always. The nav bar
+is the one deliberately light, unthemed exception — white in every mode, so
+the brand mark stays legible over the dark gradient body (`.app-backdrop` —
+`slate-900 → purple-900 → slate-900`). Fonts are Work Sans (body) and Plus
+Jakarta Sans (headings, `font-heading`), both via `next/font/google`.
+`--accent` (cyan) is the one themeable color token; everything else is
+literal Tailwind slate/purple/cyan classes, matching a design pulled from the
+retired Softgen prototype's actual source rather than invented fresh — see
+`HANDOFF.md` for why and where.
 
 ## What exists
 
-- `/login` — magic-link sign in
+- `/` — "Select Your Game": pick a game (only Grand Archive exists today),
+  reachable signed in or out. Clicking the nav logo always comes back here.
+  Signed in, the choice persists to `account.selected_game_id`; signed out,
+  it's a cookie.
+- `/login` — Google or a magic-link/code sign in
 - `/welcome` — claim a username (33), required before anything else once an
   account exists with none
-- `/collection` — your holdings, grouped by where they are, with lent-out cards
-  flagged
+- `/cards` — browse the whole catalog with server-side filters (element,
+  type, subtype, class, cost range), no account needed. Reachable both
+  signed in (the "Browse Cards" nav item) and signed out.
+- `/collection` — your holdings, grouped by where they are, with lent-out
+  cards flagged, a live client-side name search, and unique/total card counts
 - `/add` — search the catalog and put copies in a box
+- `/decks`, `/decks/[id]` — build Standard Constructed decks: material/main/
+  sideboard sections, live copy-limit and section-cap enforcement, a legality
+  badge, and a missing-from-inventory indicator against your own holdings
 - `/lend` — offer cards to a friend
 - `/friends` — add friends by username or exact email, and choose which games
   they can see
 - `/locations` — name the boxes you keep cards in, starting with "Unsorted"
   (34)
 - `/inbox` — pending requests of all five kinds, accept or decline
+
+The nav bar (`app/_components/top-nav.tsx`) is dropdown-based: "Collection"
+opens onto Collection/Add Cards/Boxes/Lend, "Friends" opens onto Friends/Lend,
+and the signed-in account menu (your username, top right) opens onto Inbox/
+Friends/Game Selection/Sign out. `app/_components/nav-menu.tsx` is the small
+hand-rolled dropdown behind all three — no Radix in this codebase.
 
 ### Two things that surprise people
 

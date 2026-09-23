@@ -12,9 +12,10 @@ where this repo came from, and why it looks the way it does.
 | [`docs/design/friends-and-loans.md`](./docs/design/friends-and-loans.md) | All 34 design decisions with rationale. |
 | [`db/`](./db) | PostgreSQL schema, RLS policies, and tests. |
 | [`supabase/migrations/`](./supabase/migrations) | Schema history, applied to the live project with the Supabase CLI. |
-| [`web/`](./web) | The Next.js app itself: auth, collection, friends, lending, inbox. |
+| [`web/`](./web) | The Next.js app itself: auth, collection, catalog browsing, a deck builder, friends, lending, inbox. |
 | [`ingest/`](./ingest) | Grand Archive catalog and image worker. |
 
-Status: database built, migrated and tested; catalog ingest working; a Next.js
-app with working auth, collection management, friends, lending and an inbox is
-live against a real Supabase project.
+Status: database built, migrated and tested; catalog and images imported for
+real; a Next.js app with working auth, collection management, a public
+catalog browser with filters, a deck builder, friends, lending and an inbox
+is live against a real Supabase project.

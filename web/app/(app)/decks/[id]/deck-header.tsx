@@ -12,7 +12,17 @@ type Summary = {
   is_legal: boolean
 }
 
-export function DeckHeader({ deckId, name, summary }: { deckId: string; name: string; summary: Summary }) {
+export function DeckHeader({
+  deckId,
+  name,
+  summary,
+  missingTotal,
+}: {
+  deckId: string
+  name: string
+  summary: Summary
+  missingTotal: number
+}) {
   const [value, setValue] = useState(name)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -35,43 +45,63 @@ export function DeckHeader({ deckId, name, summary }: { deckId: string; name: st
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={save}
-          disabled={pending}
-          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-lg font-semibold tracking-tight text-slate-100 outline-none focus:border-accent disabled:opacity-50"
-        />
-      </div>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        disabled={pending}
+        className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 font-heading text-2xl font-bold tracking-tight text-white outline-none focus:border-accent disabled:opacity-50"
+      />
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span>Material {summary.material_count}/12</span>
-        <span>Main {summary.main_count}/60 min</span>
-        <span>
-          Sideboard {summary.sideboard_count}/15 cards · {summary.sideboard_points}/15 points
-        </span>
-        {summary.is_legal ? (
-          <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-800 dark:bg-green-950 dark:text-green-300">
-            Legal
-          </span>
-        ) : (
-          <span
-            className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-            title={issues.join('; ')}
-          >
-            Not yet legal
-          </span>
-        )}
+      <div className="panel-solid flex flex-wrap items-center gap-x-8 gap-y-3 p-4">
+        <Stat label="Material Deck" value={summary.material_count} target="12" ok />
+        <Stat label="Main Deck" value={summary.main_count} target="min 60" ok={summary.main_count >= 60} />
+        <div>
+          <p className="text-xs tracking-wide text-slate-500 uppercase">Sideboard</p>
+          <p className="text-xl font-bold text-white">
+            {summary.sideboard_count}
+            <span className="text-sm font-normal text-slate-500"> / 15 cards</span>
+          </p>
+          <p className="text-xs text-slate-500">{summary.sideboard_points} / 15 points</p>
+        </div>
+
+        <div className="hidden h-10 w-px bg-slate-700 sm:block" />
+
+        <div>
+          <p className="text-xs tracking-wide text-slate-500 uppercase">Missing from Inventory</p>
+          <p className={`text-xl font-bold ${missingTotal > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+            {missingTotal}
+          </p>
+        </div>
+
+        <div className="ml-auto">
+          {summary.is_legal ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-600/20 px-2.5 py-1 text-sm font-medium text-green-300">
+              Deck is legal
+            </span>
+          ) : (
+            <span
+              className="inline-flex cursor-help items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-sm font-medium text-amber-300"
+              title={issues.join('; ')}
+            >
+              {issues.length} rule issue{issues.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
       </div>
-      {!summary.is_legal && issues.length > 0 && (
-        <ul className="text-xs text-slate-400">
-          {issues.map((i) => (
-            <li key={i}>· {i}</li>
-          ))}
-        </ul>
-      )}
+    </div>
+  )
+}
+
+function Stat({ label, value, target, ok }: { label: string; value: number; target: string; ok: boolean }) {
+  return (
+    <div>
+      <p className="text-xs tracking-wide text-slate-500 uppercase">{label}</p>
+      <p className={`text-xl font-bold ${ok ? 'text-white' : 'text-amber-400'}`}>
+        {value}
+        <span className="text-sm font-normal text-slate-500"> / {target}</span>
+      </p>
     </div>
   )
 }

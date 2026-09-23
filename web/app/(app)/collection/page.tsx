@@ -90,12 +90,14 @@ export default async function CollectionPage() {
                 alt={row.card_edition?.card?.name ?? 'Unknown card'}
               >
                 <p className="truncate text-sm font-medium">
-                  <span className="tabular-nums text-slate-400">{row.qty}×</span>{' '}
                   {row.card_edition?.card?.name ?? 'Unknown card'}
                 </p>
                 <p className="text-xs text-slate-400">
                   {row.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {row.condition}
                 </p>
+                <span className="mt-auto inline-flex h-8 items-center justify-center rounded-md border border-cyan-500 text-xs font-medium text-cyan-400">
+                  Total: {row.qty}
+                </span>
               </CardTile>
             ))}
           </div>

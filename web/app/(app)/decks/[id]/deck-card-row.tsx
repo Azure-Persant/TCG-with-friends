@@ -1,7 +1,8 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useTransition } from 'react'
-import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { cardImageUrl } from '@/lib/images'
 import { setDeckCard } from './actions'
 
 export type Row = {
@@ -17,10 +18,18 @@ export type Row = {
   owned: number
 }
 
+/**
+ * A deck-section grid tile: the art with a quantity badge overlaid on it
+ * (bottom-right, matching the reference's ViewCard), a missing-from-
+ * inventory warning badge (top-right) when short, and a compact stepper
+ * below -- the reference's own view is read-only there, but this page
+ * doubles as the editor, so the stepper has to stay.
+ */
 export function DeckCardRow({ row }: { row: Row }) {
   const [qty, setQty] = useState(row.qty)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [imgFailed, setImgFailed] = useState(false)
 
   function commit(next: number) {
     const clamped = Math.max(0, next)
@@ -42,47 +51,73 @@ export function DeckCardRow({ row }: { row: Row }) {
   }
 
   const missing = Math.max(0, qty - row.owned)
+  const hasImage = row.imageStorageKey && !imgFailed
 
   return (
-    <li className="flex items-center gap-3 py-2 text-sm">
-      <CardThumbnail storageKey={row.imageStorageKey} alt={row.cardName} />
-      <div className="flex flex-1 flex-col gap-0.5">
-        <div className="flex items-baseline gap-2">
-          <span className="font-medium">{row.cardName}</span>
-          <span className="text-xs text-slate-400">
-            {row.setName ?? 'Unknown set'}
-            {row.collectorNumber ? ` · #${row.collectorNumber}` : ''}
-            {row.finish === 'FOIL' ? ' · Foil' : ''}
-          </span>
-        </div>
-        {missing > 0 && (
-          <span className="text-xs text-amber-700 dark:text-amber-400">
-            Missing {missing} from your collection
+    <div className="panel overflow-hidden">
+      <div className="relative aspect-[2.5/3.5] w-full bg-slate-800">
+        {hasImage ? (
+          <Image
+            src={cardImageUrl(row.imageStorageKey!)}
+            alt={row.cardName}
+            fill
+            sizes="(min-width: 1280px) 12vw, (min-width: 768px) 18vw, 40vw"
+            className="object-cover"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-slate-500">
+            {row.cardName}
           </span>
         )}
-        {error && <span className="text-xs text-red-400">{error}</span>}
+
+        {row.finish === 'FOIL' && (
+          <span className="absolute left-1 top-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-200">
+            Foil
+          </span>
+        )}
+
+        {missing > 0 && (
+          <span
+            title={`Missing ${missing} from your collection`}
+            className="absolute right-1 top-1 rounded bg-amber-500 px-1 py-0.5 text-[10px] font-semibold text-slate-900 shadow"
+          >
+            !
+          </span>
+        )}
+
+        <span className="absolute bottom-1 right-1 rounded bg-slate-950/85 px-1.5 py-0.5 text-xs font-semibold text-white">
+          {qty}
+        </span>
       </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => commit(qty - 1)}
-          disabled={pending || qty <= 0}
-          className="h-7 w-7 rounded-md border border-slate-700 text-sm text-slate-300 disabled:opacity-50"
-          aria-label={`Remove one ${row.cardName}`}
-        >
-          –
-        </button>
-        <span className="w-6 text-center tabular-nums">{qty}</span>
-        <button
-          type="button"
-          onClick={() => commit(qty + 1)}
-          disabled={pending}
-          className="h-7 w-7 rounded-md border border-slate-700 text-sm text-slate-300 disabled:opacity-50"
-          aria-label={`Add one ${row.cardName}`}
-        >
-          +
-        </button>
+
+      <div className="flex flex-col gap-1 p-1.5">
+        <p className="truncate text-center text-xs font-medium" title={row.cardName}>
+          {row.cardName}
+        </p>
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => commit(qty - 1)}
+            disabled={pending || qty <= 0}
+            className="h-6 w-6 rounded border border-slate-700 text-xs text-slate-300 disabled:opacity-50"
+            aria-label={`Remove one ${row.cardName}`}
+          >
+            –
+          </button>
+          <span className="w-5 text-center text-xs tabular-nums">{qty}</span>
+          <button
+            type="button"
+            onClick={() => commit(qty + 1)}
+            disabled={pending}
+            className="h-6 w-6 rounded border border-slate-700 text-xs text-slate-300 disabled:opacity-50"
+            aria-label={`Add one ${row.cardName}`}
+          >
+            +
+          </button>
+        </div>
+        {error && <p className="text-center text-[10px] text-red-400">{error}</p>}
       </div>
-    </li>
+    </div>
   )
 }

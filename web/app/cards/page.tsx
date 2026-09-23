@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CardTile } from '@/app/_components/card-tile'
+import { TopNav } from '@/app/_components/top-nav'
 import { FilterBar, readFilterValues, hasAnyFilter, type FilterOption } from '@/app/_components/filter-bar'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,36 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
   const values = readFilterValues(sp)
   const supabase = await createClient()
 
+  // Signed-in visitors reach /cards too -- it's the "Browse" link in the
+  // authenticated nav, not just the pre-login route -- so the header has to
+  // know which one it is rather than always rendering the anonymous one.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let nav: React.ReactNode
+  if (user) {
+    const { data: account } = await supabase
+      .from('account')
+      .select('display_name, username')
+      .eq('id', user.id)
+      .single()
+    const { count: pending } = await supabase
+      .from('request')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_account_id', user.id)
+      .eq('status', 'pending')
+    nav = (
+      <TopNav
+        signedIn
+        accountLabel={account?.username ? `@${account.username}` : (account?.display_name ?? user.email ?? '')}
+        pending={pending ?? 0}
+      />
+    )
+  } else {
+    nav = <TopNav signedIn={false} />
+  }
+
   const { data: options } = await supabase.from('card_filter_options').select('kind, value, count')
 
   let results: SearchRow[] = []
@@ -66,25 +97,24 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="app-backdrop text-slate-100">
+      {nav}
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
-        <header className="flex items-baseline justify-between border-b border-white/10 pb-4">
-          <h1 className="font-heading text-lg font-bold tracking-tight text-accent">Card inventory</h1>
-          <Link href="/login" className="text-sm font-medium hover:text-accent hover:underline">
-            Sign in
-          </Link>
-        </header>
-
         <FilterBar values={values} options={(options ?? []) as FilterOption[]} />
 
         {searchError && <p className="text-sm text-red-400">Search failed: {searchError}</p>}
 
         {!hasAnyFilter(values) && (
           <p className="text-sm text-slate-400">
-            Type part of a card&apos;s name, or use the filters above, to browse the catalog.{' '}
-            <Link href="/login" className="underline">
-              Sign in
-            </Link>{' '}
-            to track your own collection and lend cards to friends.
+            Type part of a card&apos;s name, or use the filters above, to browse the catalog.
+            {!user && (
+              <>
+                {' '}
+                <Link href="/login" className="underline">
+                  Sign in
+                </Link>{' '}
+                to track your own collection and lend cards to friends.
+              </>
+            )}
           </p>
         )}
 

@@ -6,6 +6,14 @@ import { supabaseEnv } from './env'
 const PUBLIC_PATHS = ['/login', '/auth', '/cards']
 
 /**
+ * Exact-match public paths -- "/" cannot go in PUBLIC_PATHS above, since that
+ * list is matched with startsWith and every path starts with "/". "/" is now
+ * the "Select Your Game" landing page, reachable signed out (a visitor should
+ * be able to pick their game before being asked to sign in, not after).
+ */
+const PUBLIC_EXACT_PATHS = ['/']
+
+/**
  * Refresh the session cookie and bounce anonymous users to /login.
  *
  * Called from proxy.ts (what Next.js called middleware before 16).
@@ -47,7 +55,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
+  const isPublic =
+    PUBLIC_PATHS.some((p) => pathname.startsWith(p)) || PUBLIC_EXACT_PATHS.includes(pathname)
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()

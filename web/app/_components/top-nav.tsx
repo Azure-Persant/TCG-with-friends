@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { NavMenu } from './nav-menu'
 
 const navLink = 'rounded-md px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900'
 
@@ -33,12 +34,16 @@ type Props =
 /**
  * The nav bar for every page, signed in or not -- including /cards, which is
  * reachable both by anonymous visitors AND by a signed-in user clicking
- * "Browse" from inside the app (issue: visiting /cards while signed in used
- * to always render the anonymous "Sign in" header, which read as having been
- * logged out even though the session was untouched -- /cards is a public
- * path in proxy.ts, not an auth boundary). One component, one source of
- * truth for what the bar looks like, so the two states can't drift apart
+ * "Browse Cards" from inside the app (issue: visiting /cards while signed in
+ * used to always render the anonymous "Sign in" header, which read as having
+ * been logged out even though the session was untouched -- /cards is a
+ * public path in proxy.ts, not an auth boundary). One component, one source
+ * of truth for what the bar looks like, so the two states can't drift apart
  * again.
+ *
+ * The logo always links to "/" -- the "Select Your Game" landing page, not
+ * straight into /collection -- since that page is also where a future
+ * second game gets chosen.
  *
  * Deliberately light, not themed -- see the note on globals.css. The old
  * design this follows kept its header white in every mode so the brand mark
@@ -50,56 +55,59 @@ export function TopNav(props: Props) {
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-6">
-          <Link
-            href={props.signedIn ? '/collection' : '/cards'}
-            className="flex items-center gap-2 font-heading text-xl font-bold text-slate-900"
-          >
+          <Link href="/" className="flex items-center gap-2 font-heading text-xl font-bold text-slate-900">
             <LayersIcon />
             Card inventory
           </Link>
 
           {props.signedIn && (
             <nav className="hidden items-center gap-1 text-sm md:flex">
-              <Link href="/collection" className={navLink}>
-                Collection
-              </Link>
-              <Link href="/add" className={navLink}>
-                Add cards
-              </Link>
+              <NavMenu
+                trigger="Collection"
+                items={[
+                  { label: 'Collection', href: '/collection' },
+                  { label: 'Add Cards', href: '/add' },
+                  { label: 'Boxes', href: '/locations' },
+                  { label: 'Lend', href: '/lend' },
+                ]}
+              />
               <Link href="/cards" className={navLink}>
-                Browse
+                Browse Cards
               </Link>
               <Link href="/decks" className={navLink}>
                 Decks
               </Link>
-              <Link href="/lend" className={navLink}>
-                Lend
-              </Link>
-              <Link href="/friends" className={navLink}>
-                Friends
-              </Link>
-              <Link href="/locations" className={navLink}>
-                Boxes
-              </Link>
-              <Link href="/inbox" className={navLink}>
-                Inbox
-                {props.pending ? (
-                  <span className="ml-1.5 rounded-full bg-cyan-500 px-1.5 py-0.5 text-xs font-semibold text-white">
-                    {props.pending}
-                  </span>
-                ) : null}
-              </Link>
+              <NavMenu
+                trigger="Friends"
+                items={[
+                  { label: 'Friends', href: '/friends' },
+                  { label: 'Lend', href: '/lend' },
+                ]}
+              />
             </nav>
           )}
         </div>
 
         {props.signedIn ? (
-          <form action="/auth/signout" method="post" className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-500 sm:inline">{props.accountLabel}</span>
-            <button type="submit" className="text-sm text-slate-500 hover:text-slate-900 hover:underline">
-              Sign out
-            </button>
-          </form>
+          <NavMenu
+            align="right"
+            trigger={props.accountLabel}
+            items={[
+              { label: 'Inbox', href: '/inbox', badge: props.pending },
+              { label: 'Friends', href: '/friends' },
+              { label: 'Game Selection', href: '/' },
+            ]}
+            footer={
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                >
+                  Sign out
+                </button>
+              </form>
+            }
+          />
         ) : (
           <Link href="/login" className="text-sm font-medium text-slate-700 hover:text-cyan-700 hover:underline">
             Sign in

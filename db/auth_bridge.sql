@@ -36,7 +36,11 @@ SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 BEGIN
-  INSERT INTO account (id, email, display_name)
+  -- Defaults to whichever game was created first. There is only one today,
+  -- so this is unambiguous; once a second exists, a new signup should
+  -- presumably land on the game-selection landing page instead, not silently
+  -- pick one -- revisit this the day that matters.
+  INSERT INTO account (id, email, display_name, selected_game_id)
   VALUES (
     NEW.id,
     NEW.email,
@@ -46,7 +50,8 @@ BEGIN
       nullif(btrim(NEW.raw_user_meta_data ->> 'name'), ''),
       nullif(split_part(coalesce(NEW.email, ''), '@', 1), ''),
       'Player'
-    )
+    ),
+    (SELECT id FROM game ORDER BY created_at LIMIT 1)
   )
   ON CONFLICT (id) DO NOTHING;
 
@@ -119,7 +124,7 @@ CREATE TRIGGER on_auth_user_email_changed
 -- Idempotent, so this file stays safe to re-apply. Also covers anyone who
 -- signed up between the project starting and this trigger existing.
 
-INSERT INTO account (id, email, display_name)
+INSERT INTO account (id, email, display_name, selected_game_id)
 SELECT u.id,
        u.email,
        coalesce(
@@ -127,11 +132,17 @@ SELECT u.id,
          nullif(btrim(u.raw_user_meta_data ->> 'full_name'), ''),
          nullif(btrim(u.raw_user_meta_data ->> 'name'), ''),
          nullif(split_part(coalesce(u.email, ''), '@', 1), ''),
-         'Player')
+         'Player'),
+       (SELECT id FROM game ORDER BY created_at LIMIT 1)
   FROM auth.users u
  WHERE u.email IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.id = u.id)
    AND NOT EXISTS (SELECT 1 FROM account a WHERE a.email = u.email);
+
+-- Every existing account predates this column -- give them the same default
+-- a fresh signup gets, rather than leaving them stuck on the selection page.
+UPDATE account SET selected_game_id = (SELECT id FROM game ORDER BY created_at LIMIT 1)
+ WHERE selected_game_id IS NULL;
 
 -- The trigger gives new signups an Unsorted box (34); the backfill above
 -- creates account rows without going through it, so it has to do the same.

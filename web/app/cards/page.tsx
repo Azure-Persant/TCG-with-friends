@@ -1,49 +1,67 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { FilterBar, readFilterValues, hasAnyFilter, type FilterOption } from '@/app/_components/filter-bar'
 
 export const dynamic = 'force-dynamic'
 
-type Search = { q?: string }
+type Search = Record<string, string | string[] | undefined>
 
-type Edition = {
-  id: string
+type SearchRow = {
+  edition_id: string
   collector_number: string | null
-  card: { name: string } | null
-  card_set: { name: string; prefix: string } | null
-  card_edition_finish: { finish: string }[] | null
-  card_image: { storage_key: string; variant: string }[] | null
+  card_name: string | null
+  set_name: string | null
+  set_prefix: string | null
+  finishes: string[] | null
+  image_storage_key: string | null
+  element: string | null
+  types: string[] | null
+  subtypes: string[] | null
+  classes: string[] | null
+}
+
+/** number() -> undefined for '' or garbage, never NaN reaching Postgres. */
+function toInt(v: string): number | undefined {
+  if (v.trim() === '') return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.trunc(n) : undefined
 }
 
 /**
  * Browse the catalog without an account. No box, no quantity, no add action
  * beyond a link into the (authed) /add flow -- this route exists so a visitor
  * can see what the app is about before deciding to sign in.
+ *
+ * Filtering (issue #20) goes through search_card_editions, a Postgres
+ * function, rather than PostgREST embedding -- see db/schema.sql for why
+ * jsonb attribute filtering doesn't fit PostgREST's operator set cleanly.
  */
 export default async function CardsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  const { q } = await searchParams
-  const query = (q ?? '').trim()
+  const sp = await searchParams
+  const values = readFilterValues(sp)
   const supabase = await createClient()
 
-  let results: Edition[] = []
+  const { data: options } = await supabase.from('card_filter_options').select('kind, value, count')
+
+  let results: SearchRow[] = []
   let searchError: string | null = null
 
-  if (query) {
-    const { data, error } = await supabase
-      .from('card_edition')
-      // card!inner, not card: see the same note in app/(app)/add/page.tsx.
-      .select(
-        `id, collector_number,
-         card!inner ( name ),
-         card_set ( name, prefix ),
-         card_edition_finish ( finish ),
-         card_image ( storage_key, variant )`,
-      )
-      .ilike('card.name', `%${query}%`)
-      .limit(40)
+  if (hasAnyFilter(values)) {
+    const { data, error } = await supabase.rpc('search_card_editions', {
+      p_query: values.q.trim() || undefined,
+      p_elements: values.elements.length ? values.elements : undefined,
+      p_types: values.types.length ? values.types : undefined,
+      p_subtypes: values.subtypes.length ? values.subtypes : undefined,
+      p_classes: values.classes.length ? values.classes : undefined,
+      p_cost_memory_min: toInt(values.memMin),
+      p_cost_memory_max: toInt(values.memMax),
+      p_cost_reserve_min: toInt(values.resMin),
+      p_cost_reserve_max: toInt(values.resMax),
+    })
 
     if (error) searchError = error.message
-    else results = (data ?? []) as unknown as Edition[]
+    else results = (data ?? []) as SearchRow[]
   }
 
   return (
@@ -55,27 +73,13 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </Link>
       </header>
 
-      <form method="get" className="flex gap-2">
-        <input
-          name="q"
-          defaultValue={query}
-          placeholder="Search for a card…"
-          aria-label="Card name"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-        >
-          Search
-        </button>
-      </form>
+      <FilterBar values={values} options={(options ?? []) as FilterOption[]} />
 
       {searchError && <p className="text-sm text-red-600">Search failed: {searchError}</p>}
 
-      {!query && (
+      {!hasAnyFilter(values) && (
         <p className="text-sm text-neutral-500">
-          Type part of a card&apos;s name to browse the catalog.{' '}
+          Type part of a card&apos;s name, or use the filters above, to browse the catalog.{' '}
           <Link href="/login" className="underline">
             Sign in
           </Link>{' '}
@@ -83,32 +87,30 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </p>
       )}
 
-      {query && results.length === 0 && !searchError && (
+      {hasAnyFilter(values) && results.length === 0 && !searchError && (
         <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
-          <p className="font-medium">Nothing matched “{query}”</p>
+          <p className="font-medium">Nothing matched those filters</p>
         </div>
       )}
 
       <ul className="flex flex-col gap-3">
         {results.map((ed) => (
           <li
-            key={ed.id}
+            key={ed.edition_id}
             className="flex items-center gap-3 rounded-lg border border-neutral-200 p-4 transition hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
           >
-            <CardThumbnail
-              storageKey={ed.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null}
-              alt={ed.card?.name ?? 'Unknown card'}
-            />
+            <CardThumbnail storageKey={ed.image_storage_key} alt={ed.card_name ?? 'Unknown card'} />
             <div className="flex flex-col gap-1">
               <div className="flex items-baseline gap-2">
-                <span className="font-medium">{ed.card?.name ?? 'Unknown card'}</span>
+                <span className="font-medium">{ed.card_name ?? 'Unknown card'}</span>
                 <span className="text-xs text-neutral-500">
-                  {ed.card_set?.name ?? 'Unknown set'}
+                  {ed.set_name ?? 'Unknown set'}
                   {ed.collector_number ? ` · #${ed.collector_number}` : ''}
                 </span>
               </div>
               <span className="text-xs text-neutral-500">
-                {(ed.card_edition_finish ?? []).map((f) => f.finish).join(', ') || 'NONFOIL'}
+                {ed.element ? `${ed.element} · ` : ''}
+                {(ed.finishes ?? []).join(', ') || 'NONFOIL'}
               </span>
             </div>
           </li>

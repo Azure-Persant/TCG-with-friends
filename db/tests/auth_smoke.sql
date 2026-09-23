@@ -257,6 +257,28 @@ END $$;
 RESET ROLE;
 
 -- ---------------------------------------------------------------------------
+-- Display names (40)
+-- ---------------------------------------------------------------------------
+
+SET LOCAL ROLE app_user;
+SELECT auth.act_as('11111111-1111-1111-1111-111111111111');
+
+-- Unlike username, there is no uniqueness rule -- only shape.
+SELECT pg_temp.must_fail($$ SELECT app_set_display_name('') $$, 'an empty display name');
+SELECT pg_temp.must_fail($$ SELECT app_set_display_name('   ') $$, 'a whitespace-only display name');
+SELECT pg_temp.must_fail($$ SELECT app_set_display_name(repeat('x', 61)) $$,
+  'a display name over 60 characters');
+
+SELECT app_set_display_name('  Jon C  ');
+DO $$ BEGIN
+  ASSERT (SELECT display_name FROM account WHERE id = auth.uid()) = 'Jon C',
+    'a valid display name should be stored, trimmed';
+  RAISE NOTICE 'ok  (40) display names are trimmed and shape-checked, with no uniqueness rule';
+END $$;
+
+RESET ROLE;
+
+-- ---------------------------------------------------------------------------
 -- Finding someone to befriend
 -- ---------------------------------------------------------------------------
 

@@ -9,6 +9,7 @@ export type Row = {
   finish: string
   cardName: string
   storageKey: string | null
+  restricted: boolean
 }
 
 export type Group = { name: string; isHolder: boolean; rows: Row[] }
@@ -54,7 +55,13 @@ export function CollectionGrid({ groups }: { groups: Group[] }) {
             </h2>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {rows.map((row, i) => (
-                <CardTile key={i} storageKey={row.storageKey} alt={row.cardName}>
+                <CardTile
+                  key={i}
+                  storageKey={row.storageKey}
+                  alt={row.cardName}
+                  foil={row.finish === 'FOIL'}
+                  restricted={row.restricted}
+                >
                   <p className="truncate text-sm font-medium">{row.cardName}</p>
                   <p className="text-xs text-slate-400">
                     {row.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {row.condition}

@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { cardImageUrl } from '@/lib/images'
 import { Lightbox } from './card-thumbnail'
+import { FoilOverlay } from './foil-overlay'
 
 /**
  * The art-forward grid tile used by /cards, /add and /collection -- a real
@@ -16,10 +17,16 @@ import { Lightbox } from './card-thumbnail'
 export function CardTile({
   storageKey,
   alt,
+  foil = false,
+  restricted = false,
   children,
 }: {
   storageKey: string | null
   alt: string
+  /** Plays the shimmer treatment over the art (38). */
+  foil?: boolean
+  /** Standard-format restricted badge (39) -- attributes->legality->STANDARD->limit = 0. */
+  restricted?: boolean
   children?: React.ReactNode
 }) {
   const [failed, setFailed] = useState(false)
@@ -47,6 +54,20 @@ export function CardTile({
         ) : (
           <span className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-slate-500">
             {alt}
+          </span>
+        )}
+
+        {foil && <FoilOverlay />}
+
+        {foil && (
+          <span className="absolute left-1 top-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-200">
+            Foil
+          </span>
+        )}
+
+        {restricted && (
+          <span className="absolute bottom-1 left-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            Restricted
           </span>
         )}
       </button>

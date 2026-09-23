@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useState, useTransition } from 'react'
 import { cardImageUrl } from '@/lib/images'
+import { FoilOverlay } from '@/app/_components/foil-overlay'
 import { setDeckCard } from './actions'
 
 export type Row = {
@@ -16,6 +17,7 @@ export type Row = {
   collectorNumber: string | null
   imageStorageKey: string | null
   owned: number
+  restricted: boolean
 }
 
 /**
@@ -71,6 +73,8 @@ export function DeckCardRow({ row }: { row: Row }) {
           </span>
         )}
 
+        {row.finish === 'FOIL' && <FoilOverlay />}
+
         {row.finish === 'FOIL' && (
           <span className="absolute left-1 top-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-200">
             Foil
@@ -83,6 +87,12 @@ export function DeckCardRow({ row }: { row: Row }) {
             className="absolute right-1 top-1 rounded bg-amber-500 px-1 py-0.5 text-[10px] font-semibold text-slate-900 shadow"
           >
             !
+          </span>
+        )}
+
+        {row.restricted && (
+          <span className="absolute bottom-1 left-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            Restricted
           </span>
         )}
 

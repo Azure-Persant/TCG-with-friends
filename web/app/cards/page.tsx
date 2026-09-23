@@ -20,6 +20,7 @@ type SearchRow = {
   types: string[] | null
   subtypes: string[] | null
   classes: string[] | null
+  restricted: boolean | null
 }
 
 /** number() -> undefined for '' or garbage, never NaN reaching Postgres. */
@@ -130,6 +131,8 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
               key={ed.edition_id}
               storageKey={ed.image_storage_key}
               alt={ed.card_name ?? 'Unknown card'}
+              foil={(ed.finishes ?? []).includes('FOIL')}
+              restricted={ed.restricted ?? false}
             >
               <p className="truncate text-sm font-medium">{ed.card_name ?? 'Unknown card'}</p>
               <p className="truncate text-xs text-slate-400">

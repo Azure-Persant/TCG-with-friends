@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { isRestricted } from '@/lib/legality'
 import { CollectionGrid, type Group } from './collection-grid'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,7 @@ type HoldingRow = {
   location: { id: string; name: string | null; kind: string; holder_account_id: string | null } | null
   card_edition: {
     collector_number: string | null
-    card: { name: string } | null
+    card: { name: string; attributes: Record<string, unknown> } | null
     card_image: { storage_key: string; variant: string }[] | null
   } | null
 }
@@ -27,7 +28,7 @@ export default async function CollectionPage() {
     .select(
       `qty, condition, finish,
        location ( id, name, kind, holder_account_id ),
-       card_edition ( collector_number, card ( name ), card_image ( storage_key, variant ) )`,
+       card_edition ( collector_number, card ( name, attributes ), card_image ( storage_key, variant ) )`,
     )
     .order('qty', { ascending: false })
 
@@ -72,6 +73,7 @@ export default async function CollectionPage() {
       finish: h.finish,
       cardName,
       storageKey: h.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null,
+      restricted: isRestricted(h.card_edition?.card?.attributes),
     })
     uniqueCardNames.add(cardName)
     totalCards += h.qty

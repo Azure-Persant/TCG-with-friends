@@ -524,6 +524,24 @@ EXCEPTION WHEN unique_violation THEN
   RAISE EXCEPTION 'That username is taken.' USING ERRCODE = 'unique_violation';
 END $$;
 
+/** Which game's nav/collection you're currently looking at -- the "Select
+ *  Your Game" landing page calls this when you click a game tile. */
+CREATE OR REPLACE FUNCTION app_set_selected_game(p_game uuid) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not signed in'; END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM game WHERE id = p_game) THEN
+    RAISE EXCEPTION 'unknown game';
+  END IF;
+
+  UPDATE account SET selected_game_id = p_game, updated_at = now()
+   WHERE id = auth.uid();
+END $$;
+
 /**
  * Find someone to befriend, by username or by EXACT email address.
  *
@@ -1475,6 +1493,7 @@ BEGIN
     'app_send_friend_request(uuid,text)',
     'app_find_account(text)',
     'app_set_username(text)',
+    'app_set_selected_game(uuid)',
     'app_offer_loan(jsonb,uuid,text)',
     'app_request_borrow(jsonb,uuid,text)',
     'app_offer_trade(jsonb,jsonb,uuid,text,uuid)',

@@ -223,7 +223,16 @@ CREATE TABLE account (
   -- public and permanent enough that a bad one should be impossible to store
   -- rather than merely discouraged.
   CONSTRAINT account_username_shape CHECK (
-    username IS NULL OR username ~ '^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$')
+    username IS NULL OR username ~ '^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$'),
+
+  -- Which game's nav/collection you're currently looking at (the game axis
+  -- was always in the schema via card.game_id -- this is the first place the
+  -- app itself is aware of it). ON DELETE SET NULL, not RESTRICT: a game
+  -- being removed should not make an account row un-deletable-adjacent.
+  -- Defaulted at signup to whatever game exists (app_provision_account) since
+  -- there is only one today; nothing about this column assumes that stays
+  -- true.
+  selected_game_id uuid REFERENCES game(id) ON DELETE SET NULL
 );
 
 -- Friendship is mutual and accepted (1), so it is ONE row, not two.

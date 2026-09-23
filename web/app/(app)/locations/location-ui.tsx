@@ -31,18 +31,18 @@ export function NewLocation() {
           onChange={(e) => setName(e.target.value)}
           placeholder="Deck box"
           aria-label="Name of the new box"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
           disabled={pending || !name.trim()}
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           Add
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}
@@ -53,9 +53,9 @@ export function NewLocation() {
 export function LocationList({ locations }: { locations: Location[] }) {
   if (locations.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">No boxes yet</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Add one above. You need at least one before you can add cards.
         </p>
       </div>
@@ -63,7 +63,7 @@ export function LocationList({ locations }: { locations: Location[] }) {
   }
 
   return (
-    <ul className="divide-y divide-neutral-100 dark:divide-neutral-900">
+    <ul className="divide-y divide-white/10">
       {locations.map((l) => (
         <LocationRow key={l.id} location={l} />
       ))}
@@ -104,12 +104,12 @@ function LocationRow({ location }: { location: Location }) {
             onChange={(e) => setName(e.target.value)}
             autoFocus
             aria-label="New name"
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-100"
           />
           <button
             type="submit"
             disabled={pending}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm text-white transition hover:opacity-90 disabled:opacity-50"
           >
             Save
           </button>
@@ -120,7 +120,7 @@ function LocationRow({ location }: { location: Location }) {
               setName(location.name ?? '')
               setError(null)
             }}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
           >
             Cancel
           </button>
@@ -133,12 +133,12 @@ function LocationRow({ location }: { location: Location }) {
           >
             {location.name ?? 'Unnamed'}
           </Link>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-slate-400">
             {location.cards === 0 ? 'empty' : `${location.cards} card${location.cards === 1 ? '' : 's'}`}
           </span>
           <button
             onClick={() => setEditing(true)}
-            className="text-sm text-neutral-500 hover:underline"
+            className="text-sm text-slate-400 hover:underline"
           >
             Rename
           </button>
@@ -149,14 +149,14 @@ function LocationRow({ location }: { location: Location }) {
               run(deleteLocation, fd)
             }}
             disabled={pending}
-            className="text-sm text-neutral-500 hover:underline disabled:opacity-50"
+            className="text-sm text-slate-400 hover:underline disabled:opacity-50"
           >
             Delete
           </button>
         </div>
       )}
       {error && (
-        <p role="alert" className="mt-1.5 text-sm text-red-600">
+        <p role="alert" className="mt-1.5 text-sm text-red-400">
           {error}
         </p>
       )}

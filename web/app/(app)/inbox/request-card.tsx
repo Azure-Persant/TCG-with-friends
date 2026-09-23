@@ -35,19 +35,19 @@ export function RequestCard({
   }
 
   return (
-    <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <li className="panel p-4">
       <p className="text-sm">
-        <span className="font-medium">{who}</span> <span className="text-neutral-500">{what}</span>
+        <span className="font-medium">{who}</span> <span className="text-slate-400">{what}</span>
       </p>
-      {note && <p className="mt-1 text-sm text-neutral-500">“{note}”</p>}
+      {note && <p className="mt-1 text-sm text-slate-400">“{note}”</p>}
 
       {needsOrigin && (
         <label className="mt-3 flex items-center gap-2 text-sm">
-          <span className="text-neutral-500">Take from</span>
+          <span className="text-slate-400">Take from</span>
           <select
             value={origin}
             onChange={(e) => setOrigin(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
           >
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
@@ -62,20 +62,20 @@ export function RequestCard({
         <button
           onClick={() => run(acceptRequest)}
           disabled={pending || (needsOrigin && !origin)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           Accept
         </button>
         <button
           onClick={() => run(declineRequest)}
           disabled={pending}
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-neutral-700"
+          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 disabled:opacity-50"
         >
           Decline
         </button>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
     </li>
   )
 }

@@ -27,14 +27,14 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
 
   if (!locations || locations.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">You need a box first</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Cards have to live somewhere. Add a box, then come back.
         </p>
         <Link
           href="/locations"
-          className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+          className="mt-4 inline-block rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Add a box
         </Link>
@@ -74,7 +74,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
           defaultValue={query}
           placeholder="Search for a card…"
           aria-label="Card name"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
@@ -85,20 +85,20 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
       </form>
 
       {searchError && (
-        <p className="text-sm text-red-600">Search failed: {searchError}</p>
+        <p className="text-sm text-red-400">Search failed: {searchError}</p>
       )}
 
       {!query && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-slate-400">
           Type part of a card&apos;s name. Each printing is listed separately, because which one
           you own is part of what you own.
         </p>
       )}
 
       {query && results.length === 0 && !searchError && (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+        <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
           <p className="font-medium">Nothing matched “{query}”</p>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-slate-400">
             If the catalog has not been imported yet, there is nothing to find — run the Ingest
             catalog workflow first.
           </p>

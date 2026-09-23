@@ -101,7 +101,7 @@ export function LendForm({
           <select
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
           >
             {friends.map((f) => (
               <option key={f.id} value={f.id}>
@@ -117,7 +117,7 @@ export function LendForm({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="For the tournament on Saturday"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
           />
         </label>
       </section>
@@ -125,7 +125,7 @@ export function LendForm({
       <section>
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Pick cards</h2>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-slate-400">
             {total === 0 ? 'none picked' : `${total} picked`}
           </span>
         </div>
@@ -135,10 +135,10 @@ export function LendForm({
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter by name…"
           aria-label="Filter your cards"
-          className="mt-2 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          className="mt-2 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
         />
 
-        <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
+        <ul className="mt-2 divide-y divide-white/10">
           {visible.map((h) => {
             const key = keyOf(h)
             const qty = picked[key] ?? 0
@@ -146,11 +146,11 @@ export function LendForm({
               <li key={key} className="flex items-center gap-3 py-2 text-sm">
                 <span className="flex-1">
                   <span className="font-medium">{h.cardName}</span>{' '}
-                  <span className="text-xs text-neutral-500">
+                  <span className="text-xs text-slate-400">
                     {h.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {h.condition} · {h.locationName}
                   </span>
                 </span>
-                <span className="text-xs text-neutral-500">{h.available} held</span>
+                <span className="text-xs text-slate-400">{h.available} held</span>
                 <input
                   type="number"
                   min={0}
@@ -158,7 +158,7 @@ export function LendForm({
                   value={qty}
                   onChange={(e) => setQty(h, Number(e.target.value) || 0)}
                   aria-label={`How many ${h.cardName} to lend`}
-                  className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                  className="w-16 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                 />
               </li>
             )
@@ -166,7 +166,7 @@ export function LendForm({
         </ul>
 
         {visible.length === 0 && (
-          <p className="mt-3 text-sm text-neutral-500">Nothing matches “{filter}”.</p>
+          <p className="mt-3 text-sm text-slate-400">Nothing matches “{filter}”.</p>
         )}
       </section>
 
@@ -174,18 +174,18 @@ export function LendForm({
         <button
           type="submit"
           disabled={pending || total === 0}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {pending ? 'Sending…' : 'Send offer'}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-slate-400">
           Nothing leaves your boxes until they accept.
         </span>
       </div>
 
       {done && <p className="text-sm text-green-700 dark:text-green-400">{done}</p>}
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}

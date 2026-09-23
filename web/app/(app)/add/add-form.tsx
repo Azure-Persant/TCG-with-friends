@@ -56,12 +56,12 @@ export function AddForm({
   }
 
   return (
-    <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <li className="panel p-4">
       <div className="flex items-center gap-3">
         <CardThumbnail storageKey={imageStorageKey} alt={cardName} />
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">{cardName}</span>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-slate-400">
             {setName ?? 'Unknown set'}
             {collectorNumber ? ` · #${collectorNumber}` : ''}
           </span>
@@ -73,7 +73,7 @@ export function AddForm({
           <select
             value={finish}
             onChange={(e) => setFinish(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
           >
             {available.map((f) => (
               <option key={f} value={f}>
@@ -87,7 +87,7 @@ export function AddForm({
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
           >
             {CONDITIONS.map((c) => (
               <option key={c} value={c}>
@@ -101,7 +101,7 @@ export function AddForm({
           <select
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
           >
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
@@ -118,7 +118,7 @@ export function AddForm({
             max={999}
             value={qty}
             onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-            className="w-16 rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            className="w-16 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
           />
         </Field>
 
@@ -133,7 +133,7 @@ export function AddForm({
 
       {done && <p className="mt-2 text-sm text-green-700 dark:text-green-400">{done}</p>}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="mt-2 text-sm text-red-400">
           {error}
         </p>
       )}
@@ -144,7 +144,7 @@ export function AddForm({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-neutral-500">{label}</span>
+      <span className="text-xs text-slate-400">{label}</span>
       {children}
     </label>
   )

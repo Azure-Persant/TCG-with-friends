@@ -170,7 +170,7 @@ function LoginForm() {
       <Shell>
         <form onSubmit={verifyCode} className="mt-8 flex flex-col gap-3">
           <p className="text-sm font-medium">Check your email</p>
-          <p className="-mt-1 text-sm text-neutral-500">
+          <p className="-mt-1 text-sm text-slate-400">
             We sent a message to <span className="font-medium">{email}</span>. Click the sign-in
             link in it — or, if it contains a numeric code, type that here instead.
           </p>
@@ -187,7 +187,7 @@ function LoginForm() {
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
             placeholder="123456"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-lg tracking-[0.4em] text-slate-100 outline-none focus:border-accent"
           />
           <button
             type="submit"
@@ -197,7 +197,7 @@ function LoginForm() {
             {busy ? 'Checking…' : 'Sign in'}
           </button>
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-red-400">
               {error}
             </p>
           )}
@@ -208,7 +208,7 @@ function LoginForm() {
               setCode('')
               setSubmitError(null)
             }}
-            className="mt-1 text-left text-sm text-neutral-500 underline"
+            className="mt-1 text-left text-sm text-slate-400 underline"
           >
             Use a different email
           </button>
@@ -223,16 +223,16 @@ function LoginForm() {
         type="button"
         onClick={signInWithGoogle}
         disabled={busy}
-        className="mt-8 flex w-full items-center justify-center gap-3 rounded-md border border-neutral-300 px-3 py-2.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        className="mt-8 flex w-full items-center justify-center gap-3 rounded-md border border-white/20 px-3 py-2.5 text-sm font-medium hover:bg-white/5 disabled:opacity-50"
       >
         <GoogleMark />
         Continue with Google
       </button>
 
       <div className="mt-6 flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
-        <span className="text-xs text-neutral-500">or</span>
-        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+        <span className="h-px flex-1 bg-white/10" />
+        <span className="text-xs text-slate-400">or</span>
+        <span className="h-px flex-1 bg-white/10" />
       </div>
 
       <form onSubmit={sendCode} className="mt-6 flex flex-col gap-3">
@@ -247,7 +247,7 @@ function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+          className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
@@ -257,7 +257,7 @@ function LoginForm() {
           {busy ? 'Sending…' : 'Email me a sign-in code'}
         </button>
         {error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-red-400">
             {error}
           </p>
         )}
@@ -292,13 +292,13 @@ function GoogleMark() {
 
 function Shell({ children }: { children?: React.ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-accent">Card inventory</h1>
-      <p className="mt-2 text-sm text-neutral-500">
+    <main className="app-backdrop mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-slate-100">
+      <h1 className="font-heading text-2xl font-bold tracking-tight text-accent">Card inventory</h1>
+      <p className="mt-2 text-sm text-slate-400">
         Keep track of what you own, what you have lent out, and who still has it.
       </p>
       {children}
-      <Link href="/cards" className="mt-8 text-center text-sm text-neutral-500 underline">
+      <Link href="/cards" className="mt-8 text-center text-sm text-slate-400 underline">
         Just want to browse the cards? No sign-in needed.
       </Link>
     </main>

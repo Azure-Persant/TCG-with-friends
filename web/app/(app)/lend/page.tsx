@@ -37,14 +37,14 @@ export default async function LendPage() {
 
   if (friendIds.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">No friends to lend to yet</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Lending is only possible between accepted friends (2).
         </p>
         <Link
           href="/friends"
-          className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+          className="mt-4 inline-block rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Add a friend
         </Link>
@@ -68,15 +68,15 @@ export default async function LendPage() {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">Nothing to lend</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Cards already out on loan are not listed here — you cannot lend what you are not
           holding.
         </p>
         <Link
           href="/add"
-          className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+          className="mt-4 inline-block rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Add cards
         </Link>

@@ -17,7 +17,7 @@ export function CardThumbnail({ storageKey, alt }: { storageKey: string | null; 
     return (
       <div
         aria-hidden
-        className="flex h-24 w-[68px] shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-300 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-600"
+        className="flex h-24 w-[68px] shrink-0 items-center justify-center rounded-md border border-dashed border-white/20 text-[10px] text-slate-500"
       >
         no image
       </div>
@@ -29,7 +29,7 @@ export function CardThumbnail({ storageKey, alt }: { storageKey: string | null; 
       <button
         type="button"
         onClick={() => setEnlarged(true)}
-        className="shrink-0 cursor-zoom-in rounded-md ring-offset-2 outline-none transition hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-neutral-900 dark:ring-offset-neutral-950 dark:focus-visible:ring-neutral-100"
+        className="shrink-0 cursor-zoom-in rounded-md ring-offset-2 ring-offset-slate-900 outline-none transition hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-cyan-400"
         aria-label={`Enlarge ${alt}`}
       >
         <Image
@@ -37,7 +37,7 @@ export function CardThumbnail({ storageKey, alt }: { storageKey: string | null; 
           alt={alt}
           width={68}
           height={95}
-          className="h-24 w-[68px] rounded-md object-cover shadow-sm"
+          className="h-24 w-[68px] rounded-md object-cover shadow-md ring-1 ring-white/10"
           onError={() => setFailed(true)}
         />
       </button>

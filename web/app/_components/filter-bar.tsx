@@ -66,7 +66,7 @@ export function FilterBar({
           defaultValue={values.q}
           placeholder="Search for a card…"
           aria-label="Card name"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
@@ -82,9 +82,9 @@ export function FilterBar({
         <CheckboxGroup label="Subtype" name="st" selected={values.subtypes} options={byKind('subtype')} />
         <CheckboxGroup label="Class" name="cl" selected={values.classes} options={byKind('class')} />
 
-        <details className="rounded-md border border-neutral-300 dark:border-neutral-700">
+        <details className="rounded-md border border-slate-700">
           <summary className="cursor-pointer px-3 py-1.5 text-sm font-medium">Cost</summary>
-          <div className="flex flex-col gap-2 border-t border-neutral-200 p-3 text-sm dark:border-neutral-800">
+          <div className="flex flex-col gap-2 border-t border-white/10 p-3 text-sm">
             <CostRange label="Memory" minName="memMin" maxName="memMax" min={values.memMin} max={values.memMax} />
             <CostRange label="Reserve" minName="resMin" maxName="resMax" min={values.resMin} max={values.resMax} />
           </div>
@@ -108,12 +108,12 @@ function CheckboxGroup({
   if (options.length === 0) return null
 
   return (
-    <details className="rounded-md border border-neutral-300 dark:border-neutral-700" open={selected.length > 0}>
+    <details className="rounded-md border border-slate-700" open={selected.length > 0}>
       <summary className="cursor-pointer px-3 py-1.5 text-sm font-medium">
         {label}
         {selected.length > 0 && <span className="ml-1 text-accent">({selected.length})</span>}
       </summary>
-      <div className="flex max-h-56 flex-col gap-1 overflow-y-auto border-t border-neutral-200 p-3 text-sm dark:border-neutral-800">
+      <div className="flex max-h-56 flex-col gap-1 overflow-y-auto border-t border-white/10 p-3 text-sm">
         {options.map((o) => (
           <label key={o.value} className="flex items-center gap-2">
             <input
@@ -124,7 +124,7 @@ function CheckboxGroup({
               className="accent-current text-accent"
             />
             {o.value}
-            <span className="text-xs text-neutral-500">({o.count})</span>
+            <span className="text-xs text-slate-400">({o.count})</span>
           </label>
         ))}
       </div>
@@ -147,23 +147,23 @@ function CostRange({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 text-neutral-500">{label}</span>
+      <span className="w-16 text-slate-400">{label}</span>
       <input
         type="number"
         name={minName}
         defaultValue={min}
         placeholder="min"
         min={0}
-        className="w-16 rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+        className="w-16 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-slate-100"
       />
-      <span className="text-neutral-500">–</span>
+      <span className="text-slate-400">–</span>
       <input
         type="number"
         name={maxName}
         defaultValue={max}
         placeholder="max"
         min={0}
-        className="w-16 rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+        className="w-16 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-slate-100"
       />
     </div>
   )

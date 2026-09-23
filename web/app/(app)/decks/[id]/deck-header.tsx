@@ -41,12 +41,12 @@ export function DeckHeader({ deckId, name, summary }: { deckId: string; name: st
           onChange={(e) => setValue(e.target.value)}
           onBlur={save}
           disabled={pending}
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-lg font-semibold tracking-tight outline-none focus:border-accent disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-950"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-lg font-semibold tracking-tight text-slate-100 outline-none focus:border-accent disabled:opacity-50"
         />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span>Material {summary.material_count}/12</span>
         <span>Main {summary.main_count}/60 min</span>
         <span>
@@ -66,7 +66,7 @@ export function DeckHeader({ deckId, name, summary }: { deckId: string; name: st
         )}
       </div>
       {!summary.is_legal && issues.length > 0 && (
-        <ul className="text-xs text-neutral-500">
+        <ul className="text-xs text-slate-400">
           {issues.map((i) => (
             <li key={i}>· {i}</li>
           ))}

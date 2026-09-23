@@ -101,14 +101,14 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
           <section key={key}>
             <h2 className="text-sm font-semibold">
               {label}
-              <span className="ml-2 text-xs font-normal text-neutral-500">
+              <span className="ml-2 text-xs font-normal text-slate-400">
                 {sectionRows.reduce((n, r) => n + r.qty, 0)} cards
               </span>
             </h2>
             {sectionRows.length === 0 ? (
-              <p className="mt-2 text-sm text-neutral-500">Nothing here yet.</p>
+              <p className="mt-2 text-sm text-slate-400">Nothing here yet.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
+              <ul className="mt-2 divide-y divide-white/10">
                 {sectionRows.map((r) => (
                   <DeckCardRow key={`${r.editionId}:${r.section}:${r.finish}`} row={r} />
                 ))}

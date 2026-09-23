@@ -31,7 +31,7 @@ export function NewDeck() {
           onChange={(e) => setName(e.target.value)}
           placeholder="New deck name"
           aria-label="New deck name"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
@@ -42,7 +42,7 @@ export function NewDeck() {
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}
@@ -55,9 +55,9 @@ type Deck = { id: string; name: string; updated_at: string }
 export function DeckList({ decks }: { decks: Deck[] }) {
   if (decks.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">No decks yet</p>
-        <p className="mt-1 text-sm text-neutral-500">Create one above to start building.</p>
+        <p className="mt-1 text-sm text-slate-400">Create one above to start building.</p>
       </div>
     )
   }
@@ -87,17 +87,17 @@ function DeckRow({ deck }: { deck: Deck }) {
   }
 
   return (
-    <li className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <li className="flex items-center justify-between panel p-4">
       <Link href={`/decks/${deck.id}`} className="font-medium hover:text-accent hover:underline">
         {deck.name}
       </Link>
       <div className="flex items-center gap-3">
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-red-400">{error}</span>}
         <button
           type="button"
           onClick={remove}
           disabled={pending}
-          className="text-sm text-neutral-500 hover:text-red-600 disabled:opacity-50"
+          className="text-sm text-slate-400 hover:text-red-400 disabled:opacity-50"
         >
           Delete
         </button>

@@ -16,7 +16,7 @@ export default async function DecksPage() {
   return (
     <div className="flex flex-col gap-6">
       <NewDeck />
-      {error && <p className="text-sm text-red-600">Could not load decks: {error.message}</p>}
+      {error && <p className="text-sm text-red-400">Could not load decks: {error.message}</p>}
       <DeckList decks={data ?? []} />
     </div>
   )

@@ -242,7 +242,7 @@ became explicit when the smoke test tripped over it on a final return.
 | Path | What |
 |---|---|
 | `docs/design/friends-and-loans.md` | All 34 decisions with rationale. The source of truth. |
-| `db/schema.sql` | 23 tables. Portable Postgres, no Supabase dependency. |
+| `db/schema.sql` | 25 tables. Portable Postgres, no Supabase dependency. |
 | `db/policies.sql` | Row Level Security. **Required on Supabase.** |
 | `db/functions.sql` | Every mutation, as `SECURITY DEFINER` RPCs. |
 | `db/local/auth_shim.sql` | Local stand-in for `auth.uid()`. Never load on Supabase. |

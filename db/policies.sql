@@ -200,6 +200,28 @@ CREATE POLICY holding_friend_read ON holding
   );
 
 -- ---------------------------------------------------------------------------
+-- Decks (issue #21)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE deck      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deck_card ENABLE ROW LEVEL SECURITY;
+
+-- SELECT only, same reasoning as holding: the copy-limit and section-size
+-- math in app_set_deck_card only means something if it is the only way in.
+-- No sharing policy yet -- see issue #22, deliberately separate.
+CREATE POLICY deck_own ON deck
+  FOR SELECT USING (account_id = auth.uid());
+
+-- deck_card has no account_id of its own; deck_card -> deck is the only
+-- direction this policy reads in (deck's own policy never reads deck_card),
+-- so a plain EXISTS is safe here -- it is the loan/loan_line cycle (see
+-- HANDOFF.md) that requires a SECURITY DEFINER helper instead, not this.
+CREATE POLICY deck_card_own ON deck_card
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM deck d WHERE d.id = deck_card.deck_id AND d.account_id = auth.uid())
+  );
+
+-- ---------------------------------------------------------------------------
 -- Loans
 -- ---------------------------------------------------------------------------
 

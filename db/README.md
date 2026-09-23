@@ -41,7 +41,7 @@ a guess. Every check corresponds to a way this can fail **silently** — an app
 where everything is empty, or everything is visible — because those are the
 failures worth a round-trip to rule out:
 
-- all 23 tables present
+- all 25 tables present
 - RLS enabled on every one of them
 - every user-facing table has a policy (RLS on with no policy denies all)
 - `catalog_sync_run` still has *no* policy — operational data stays closed

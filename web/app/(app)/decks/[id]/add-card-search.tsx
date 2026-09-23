@@ -12,6 +12,17 @@ type SearchRow = {
   set_name: string | null
   finishes: string[] | null
   image_storage_key: string | null
+  types: string[] | null
+}
+
+/** Champion/Regalia cards go in the material deck and pool to 1 copy;
+ *  everything else goes in the main deck and pools to 4 (see
+ *  app_set_deck_card in db/functions.sql for the authoritative version --
+ *  this is a client-side hint only, so the input doesn't invite a value that
+ *  is certain to be rejected, not a substitute for the server check, which
+ *  also knows how many you already have and any Standard-legality override. */
+function isMaterialType(types: string[] | null): boolean {
+  return (types ?? []).some((t) => t === 'CHAMPION' || t === 'REGALIA')
 }
 
 /**
@@ -64,7 +75,10 @@ export function AddCardSearch({ deckId }: { deckId: string }) {
 
 function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
   const available = row.finishes && row.finishes.length > 0 ? row.finishes : ['NONFOIL']
-  const [section, setSection] = useState<'material' | 'main' | 'sideboard'>('main')
+  const material = isMaterialType(row.types)
+  const maxQty = material ? 1 : 4
+
+  const [section, setSection] = useState<'material' | 'main' | 'sideboard'>(material ? 'material' : 'main')
   const [finish, setFinish] = useState(available[0]!)
   const [qty, setQty] = useState(1)
   const [pending, start] = useTransition()
@@ -102,8 +116,10 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
         onChange={(e) => setSection(e.target.value as typeof section)}
         className="rounded-md border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
       >
-        <option value="material">Material</option>
-        <option value="main">Main</option>
+        {/* Only the section this card is actually eligible for -- app_set_deck_card
+            rejects a Champion/Regalia in Main and everything else in Material, so
+            there's no reason to offer a choice that can only fail. */}
+        {material ? <option value="material">Material</option> : <option value="main">Main</option>}
         <option value="sideboard">Sideboard</option>
       </select>
       <select
@@ -120,9 +136,9 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
       <input
         type="number"
         min={1}
-        max={60}
+        max={maxQty}
         value={qty}
-        onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+        onChange={(e) => setQty(Math.min(maxQty, Math.max(1, Number(e.target.value) || 1)))}
         className="w-12 rounded-md border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
       />
       <button

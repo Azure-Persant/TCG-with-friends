@@ -3,30 +3,55 @@
 import { useState, useTransition } from 'react'
 import { acceptRequest, declineRequest } from './actions'
 
+export type BorrowItem = {
+  id: string
+  cardName: string
+  finish: string
+  qty: number
+  /** A box that already holds this card, where one can be determined --
+   *  otherwise the first box in the list. Always a real location id as long
+   *  as the owner has at least one box (30's "you need a box first" gate
+   *  guarantees that). */
+  defaultLocationId: string
+}
+
 export function RequestCard({
   id,
   who,
   what,
   note,
-  needsOrigin,
+  items,
   locations,
 }: {
   id: string
   who: string
   what: string
   note: string | null
-  needsOrigin: boolean
+  /** null for every kind except borrow_request. */
+  items: BorrowItem[] | null
   locations: { id: string; name: string | null }[]
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [origin, setOrigin] = useState(locations[0]?.id ?? '')
+
+  // One origin choice per card (12) -- a borrow request covering several
+  // cards that genuinely live in different boxes needs to say so, rather
+  // than forcing all of them out of whichever box is picked once for the
+  // whole request.
+  const [origins, setOrigins] = useState<Record<string, string>>(
+    () => Object.fromEntries((items ?? []).map((it) => [it.id, it.defaultLocationId])),
+  )
+
+  const needsOrigin = items !== null && items.length > 0
+  const allOriginsSet = !needsOrigin || items!.every((it) => origins[it.id])
 
   function run(action: (fd: FormData) => Promise<{ ok: boolean; error?: string }>) {
     setError(null)
     const fd = new FormData()
     fd.set('requestId', id)
-    if (needsOrigin && origin) fd.set('originLocationId', origin)
+    if (needsOrigin) {
+      fd.set('origins', JSON.stringify(items!.map((it) => ({ id: it.id, locationId: origins[it.id] }))))
+    }
 
     startTransition(async () => {
       const result = await action(fd)
@@ -42,26 +67,34 @@ export function RequestCard({
       {note && <p className="mt-1 text-sm text-slate-400">“{note}”</p>}
 
       {needsOrigin && (
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <span className="text-slate-400">Take from</span>
-          <select
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
-          >
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name ?? 'Unnamed'}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ul className="mt-3 flex flex-col gap-2">
+          {items!.map((it) => (
+            <li key={it.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-slate-300">
+                {it.qty}× {it.cardName}
+                {it.finish === 'FOIL' ? ' (foil)' : ''}
+              </span>
+              <span className="ml-auto text-slate-400">Take from</span>
+              <select
+                value={origins[it.id] ?? ''}
+                onChange={(e) => setOrigins((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+              >
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name ?? 'Unnamed'}
+                  </option>
+                ))}
+              </select>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="mt-3 flex gap-2">
         <button
           onClick={() => run(acceptRequest)}
-          disabled={pending || (needsOrigin && !origin)}
+          disabled={pending || !allOriginsSet}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           Accept

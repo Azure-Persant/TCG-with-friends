@@ -208,7 +208,8 @@ ALTER TABLE deck_card ENABLE ROW LEVEL SECURITY;
 
 -- SELECT only, same reasoning as holding: the copy-limit and section-size
 -- math in app_set_deck_card only means something if it is the only way in.
--- No sharing policy yet -- see issue #22, deliberately separate.
+-- No sharing policy yet -- deck sharing/showcase are issues #34/#35,
+-- deliberately separate from collection sharing (#22, below).
 CREATE POLICY deck_own ON deck
   FOR SELECT USING (account_id = auth.uid());
 
@@ -220,6 +221,20 @@ CREATE POLICY deck_card_own ON deck_card
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM deck d WHERE d.id = deck_card.deck_id AND d.account_id = auth.uid())
   );
+
+-- ---------------------------------------------------------------------------
+-- Collection sharing: a read-only public link (22)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE collection_share ENABLE ROW LEVEL SECURITY;
+
+-- SELECT only, same shape as deck_own: app_create/revoke/delete_collection_
+-- share are the only way to write this table. A guest viewing a shared
+-- collection never reads this table directly either -- shared_collection
+-- and shared_collection_meta resolve the token through a SECURITY DEFINER
+-- helper instead, so this policy only ever needs to answer for the owner.
+CREATE POLICY collection_share_own ON collection_share
+  FOR SELECT USING (account_id = auth.uid());
 
 -- ---------------------------------------------------------------------------
 -- Loans

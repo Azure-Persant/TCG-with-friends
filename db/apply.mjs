@@ -56,6 +56,7 @@ const TEST_FILES = [
   'tests/request_smoke.sql',
   'tests/auth_smoke.sql',
   'tests/deck_smoke.sql',
+  'tests/collection_share_smoke.sql',
 ]
 
 function parseArgs(argv) {
@@ -152,7 +153,7 @@ async function verify(client) {
      WHERE n.nspname = 'public' AND c.relkind = 'r'
      ORDER BY c.relname`)
 
-  add(tables.rowCount === 25, `25 tables present`, `found ${tables.rowCount}`)
+  add(tables.rowCount === 26, `26 tables present`, `found ${tables.rowCount}`)
 
   const noRls = tables.rows.filter((r) => !r.relrowsecurity).map((r) => r.relname)
   add(

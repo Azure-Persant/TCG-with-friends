@@ -625,6 +625,46 @@ CREATE TABLE listing (
 CREATE INDEX listing_by_edition ON listing (edition_id, finish) WHERE for_trade OR for_sale;
 
 -- ---------------------------------------------------------------------------
+-- Collection sharing: a read-only public link (22)
+-- ---------------------------------------------------------------------------
+
+-- An open link, not an invite: the token is the only credential. No
+-- invited-email restriction (unlike the retired Softgen app's version of
+-- this) -- the issue asked for a public link, and a signed-in-only
+-- restriction is a different feature with its own auth questions, deferred
+-- rather than guessed at.
+--
+-- One account may hold several of these (a "playgroup" link and a "for
+-- sale" link, say) since nothing here scopes WHICH cards a share shows --
+-- every share exposes the same view of the owner's whole physical
+-- collection (see shared_collection below). Per-share scoping is exactly
+-- the kind of unexercised, half-built option this project avoids adding
+-- before there is a second use for it.
+CREATE TABLE collection_share (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+
+  -- Two random uuids, hyphens stripped: 64 hex characters, ~244 bits of
+  -- entropy -- not enumerable. gen_random_uuid() rather than pgcrypto's
+  -- gen_random_bytes, which is not in the default search_path on Supabase
+  -- and would make this depend on where that extension happens to live.
+  token       text NOT NULL UNIQUE DEFAULT
+    replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
+
+  label       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+
+  -- Both NULL by default: no expiry unless the owner sets one, live unless
+  -- revoked. Revoked rather than deleted on the common path, so the row
+  -- stays as a record of the grant; app_delete_collection_share still exists
+  -- for actually removing it.
+  expires_at  timestamptz,
+  revoked_at  timestamptz
+);
+
+CREATE INDEX collection_share_account_idx ON collection_share (account_id);
+
+-- ---------------------------------------------------------------------------
 -- Trades: the only thing that moves cards between accounts (24)
 -- ---------------------------------------------------------------------------
 

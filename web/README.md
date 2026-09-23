@@ -189,10 +189,12 @@ retired Softgen prototype's actual source rather than invented fresh — see
   account exists with none
 - `/cards` — browse the whole catalog with server-side filters (element,
   type, subtype, class, cost range), no account needed. Reachable both
-  signed in (the "Browse Cards" nav item) and signed out.
+  signed in (the "Browse Cards" nav item) and signed out. Clicking a card
+  opens a detail dialog (full text/stats, a printings switcher).
 - `/collection` — your holdings, grouped by where they are, with lent-out
   cards flagged, a live client-side name search, and unique/total card counts
-- `/add` — search the catalog and put copies in a box
+- `/add` — search the catalog and put copies in a box; also opens the card
+  detail dialog
 - `/decks`, `/decks/[id]` — build Standard Constructed decks: material/main/
   sideboard sections, live copy-limit and section-cap enforcement, a legality
   badge, and a missing-from-inventory indicator against your own holdings
@@ -201,13 +203,21 @@ retired Softgen prototype's actual source rather than invented fresh — see
   they can see
 - `/locations` — name the boxes you keep cards in, starting with "Unsorted"
   (34)
-- `/inbox` — pending requests of all five kinds, accept or decline
+- `/inbox` — pending requests of all five kinds, accept or decline; a
+  borrow request lets you pick which box each card comes out of individually
+- `/profile` — view or change your display name and username after the
+  one-time `/welcome` step
+- `/collection/share` — create, revoke or delete a public, read-only link to
+  your collection (name/quantity/finish/condition, never a location or who
+  is holding a loaned copy)
+- `/shared/[token]` — what that link opens to. No account needed.
 
 The nav bar (`app/_components/top-nav.tsx`) is dropdown-based: "Collection"
-opens onto Collection/Add Cards/Boxes/Lend, "Friends" opens onto Friends/Lend,
-and the signed-in account menu (your username, top right) opens onto Inbox/
-Friends/Game Selection/Sign out. `app/_components/nav-menu.tsx` is the small
-hand-rolled dropdown behind all three — no Radix in this codebase.
+opens onto Collection/Add Cards/Boxes/Lend/Share, "Friends" opens onto
+Friends/Lend, and the signed-in account menu (your username, top right)
+opens onto Inbox/Friends/Profile/Game Selection/Sign out.
+`app/_components/nav-menu.tsx` is the small hand-rolled dropdown behind all
+three — no Radix in this codebase.
 
 ### Two things that surprise people
 

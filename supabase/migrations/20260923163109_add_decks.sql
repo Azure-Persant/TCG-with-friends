@@ -118,6 +118,9 @@ DECLARE
 BEGIN
   IF p_qty < 0 THEN RAISE EXCEPTION 'qty cannot be negative'; END IF;
 
+  -- Locks the deck row for the rest of this check-and-write, so two
+  -- concurrent edits to the same deck cannot both pass the aggregate checks
+  -- below and together exceed a limit neither alone would have.
   IF NOT EXISTS (SELECT 1 FROM deck WHERE id = p_deck AND account_id = auth.uid() FOR UPDATE) THEN
     RAISE EXCEPTION 'not your deck' USING ERRCODE = 'insufficient_privilege';
   END IF;
@@ -156,6 +159,8 @@ BEGIN
     v_pool_cap := LEAST(v_pool_cap, v_limit);
   END IF;
 
+  -- Copy-limit pool: material-type cards pool material+sideboard rows of the
+  -- same card name; everything else pools main+sideboard rows instead (18).
   SELECT coalesce(sum(dc.qty), 0) INTO v_pool_other_qty
     FROM deck_card dc JOIN card_edition ce2 ON ce2.id = dc.edition_id
    WHERE dc.deck_id = p_deck

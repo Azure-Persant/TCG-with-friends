@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -297,6 +298,9 @@ function Shell({ children }: { children?: React.ReactNode }) {
         Keep track of what you own, what you have lent out, and who still has it.
       </p>
       {children}
+      <Link href="/cards" className="mt-8 text-center text-sm text-neutral-500 underline">
+        Just want to browse the cards? No sign-in needed.
+      </Link>
     </main>
   )
 }

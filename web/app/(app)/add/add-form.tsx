@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { addCards } from './actions'
+import { CardThumbnail } from '@/app/_components/card-thumbnail'
 
 /** Worst to best is the order people actually think in when grading. */
 const CONDITIONS = ['MINT', 'NM', 'LP', 'MP', 'HP', 'DMG'] as const
@@ -12,6 +13,7 @@ export function AddForm({
   setName,
   collectorNumber,
   finishes,
+  imageStorageKey,
   locations,
 }: {
   editionId: string
@@ -19,6 +21,7 @@ export function AddForm({
   setName: string | null
   collectorNumber: string | null
   finishes: string[]
+  imageStorageKey: string | null
   locations: { id: string; name: string | null }[]
 }) {
   // A printing that exists only in foil should not offer nonfoil (21).
@@ -54,12 +57,15 @@ export function AddForm({
 
   return (
     <li className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex items-baseline gap-2">
-        <span className="font-medium">{cardName}</span>
-        <span className="text-xs text-neutral-500">
-          {setName ?? 'Unknown set'}
-          {collectorNumber ? ` · #${collectorNumber}` : ''}
-        </span>
+      <div className="flex items-start gap-3">
+        <CardThumbnail storageKey={imageStorageKey} alt={cardName} />
+        <div className="flex items-baseline gap-2">
+          <span className="font-medium">{cardName}</span>
+          <span className="text-xs text-neutral-500">
+            {setName ?? 'Unknown set'}
+            {collectorNumber ? ` · #${collectorNumber}` : ''}
+          </span>
+        </div>
       </div>
 
       <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2">

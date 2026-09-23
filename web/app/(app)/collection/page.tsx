@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { CardThumbnail } from '@/app/_components/card-thumbnail'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +8,11 @@ type Row = {
   condition: string
   finish: string
   location: { id: string; name: string | null; kind: string; holder_account_id: string | null } | null
-  card_edition: { collector_number: string | null; card: { name: string } | null } | null
+  card_edition: {
+    collector_number: string | null
+    card: { name: string } | null
+    card_image: { storage_key: string; variant: string }[] | null
+  } | null
 }
 
 export default async function CollectionPage() {
@@ -21,7 +26,7 @@ export default async function CollectionPage() {
     .select(
       `qty, condition, finish,
        location ( id, name, kind, holder_account_id ),
-       card_edition ( collector_number, card ( name ) )`,
+       card_edition ( collector_number, card ( name ), card_image ( storage_key, variant ) )`,
     )
     .order('qty', { ascending: false })
 
@@ -77,7 +82,13 @@ export default async function CollectionPage() {
           </h2>
           <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
             {group.rows.map((row, i) => (
-              <li key={i} className="flex items-baseline gap-3 py-2 text-sm">
+              <li key={i} className="flex items-center gap-3 py-2 text-sm">
+                <CardThumbnail
+                  storageKey={
+                    row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
+                  }
+                  alt={row.card_edition?.card?.name ?? 'Unknown card'}
+                />
                 <span className="w-8 tabular-nums text-neutral-500">{row.qty}×</span>
                 <span className="font-medium">{row.card_edition?.card?.name ?? 'Unknown card'}</span>
                 <span className="text-xs text-neutral-500">

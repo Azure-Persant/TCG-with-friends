@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { supabaseEnv } from './env'
 
 /** Paths reachable without being signed in. */
-const PUBLIC_PATHS = ['/login', '/auth']
+const PUBLIC_PATHS = ['/login', '/auth', '/cards']
 
 /**
  * Refresh the session cookie and bounce anonymous users to /login.

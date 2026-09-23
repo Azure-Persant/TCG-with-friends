@@ -86,33 +86,35 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
     owned: owned.get(`${c.edition_id}:${c.finish}`) ?? 0,
   }))
 
+  const missingTotal = rows.reduce((n, r) => n + Math.max(0, r.qty - r.owned), 0)
+
   return (
     <div className="flex flex-col gap-8">
-      <DeckHeader deckId={id} name={deck.name} summary={summary} />
+      <DeckHeader deckId={id} name={deck.name} summary={summary} missingTotal={missingTotal} />
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Add cards</h2>
+        <h2 className="mb-2 text-sm font-semibold text-white">Add cards</h2>
         <AddCardSearch deckId={id} />
       </section>
 
       {SECTIONS.map(({ key, label }) => {
         const sectionRows = rows.filter((r) => r.section === key)
         return (
-          <section key={key}>
-            <h2 className="text-sm font-semibold">
-              {label}
-              <span className="ml-2 text-xs font-normal text-slate-400">
+          <section key={key} className="panel-solid p-3">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <h2 className="font-heading text-lg font-bold text-white">{label}</h2>
+              <span className="text-sm text-slate-400">
                 {sectionRows.reduce((n, r) => n + r.qty, 0)} cards
               </span>
-            </h2>
+            </div>
             {sectionRows.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-400">Nothing here yet.</p>
+              <p className="px-1 py-2 text-sm text-slate-400">Nothing here yet.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-white/10">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8">
                 {sectionRows.map((r) => (
                   <DeckCardRow key={`${r.editionId}:${r.section}:${r.finish}`} row={r} />
                 ))}
-              </ul>
+              </div>
             )}
           </section>
         )

@@ -46,7 +46,7 @@ export default async function FriendsPage() {
     <div className="flex flex-col gap-10">
       <section>
         <h2 className="text-sm font-semibold">Add a friend</h2>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Their username, or their exact email address. Both must be typed in full: partial
           search is deliberately not possible, because it would turn this into a directory of
           everyone using the app.
@@ -59,20 +59,20 @@ export default async function FriendsPage() {
       <section>
         <h2 className="text-sm font-semibold">Friends</h2>
         {friendAccounts && friendAccounts.length > 0 ? (
-          <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
+          <ul className="mt-2 divide-y divide-white/10">
             {friendAccounts.map((f) => (
               <FriendRow key={f.id} id={f.id} name={f.display_name} />
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-neutral-500">Nobody yet.</p>
+          <p className="mt-2 text-sm text-slate-400">Nobody yet.</p>
         )}
       </section>
 
       {outgoing && outgoing.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold">Waiting on them</h2>
-          <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
+          <ul className="mt-2 divide-y divide-white/10">
             {outgoing.map((r) => {
               const who = Array.isArray(r.recipient) ? r.recipient[0] : r.recipient
               return (
@@ -85,7 +85,7 @@ export default async function FriendsPage() {
 
       <section>
         <h2 className="text-sm font-semibold">What friends can see</h2>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Per game, and the same for every friend. A friend sees nothing of yours until you
           share the game — they never see which box a card is in (14).
         </p>

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { CardTile } from '@/app/_components/card-tile'
 import { FilterBar, readFilterValues, hasAnyFilter, type FilterOption } from '@/app/_components/filter-bar'
 
 export const dynamic = 'force-dynamic'
@@ -65,57 +65,55 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
-      <header className="flex items-baseline justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
-        <h1 className="text-lg font-semibold tracking-tight text-accent">Card inventory</h1>
-        <Link href="/login" className="text-sm font-medium hover:text-accent hover:underline">
-          Sign in
-        </Link>
-      </header>
-
-      <FilterBar values={values} options={(options ?? []) as FilterOption[]} />
-
-      {searchError && <p className="text-sm text-red-600">Search failed: {searchError}</p>}
-
-      {!hasAnyFilter(values) && (
-        <p className="text-sm text-neutral-500">
-          Type part of a card&apos;s name, or use the filters above, to browse the catalog.{' '}
-          <Link href="/login" className="underline">
+    <div className="app-backdrop text-slate-100">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
+        <header className="flex items-baseline justify-between border-b border-white/10 pb-4">
+          <h1 className="font-heading text-lg font-bold tracking-tight text-accent">Card inventory</h1>
+          <Link href="/login" className="text-sm font-medium hover:text-accent hover:underline">
             Sign in
-          </Link>{' '}
-          to track your own collection and lend cards to friends.
-        </p>
-      )}
+          </Link>
+        </header>
 
-      {hasAnyFilter(values) && results.length === 0 && !searchError && (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
-          <p className="font-medium">Nothing matched those filters</p>
-        </div>
-      )}
+        <FilterBar values={values} options={(options ?? []) as FilterOption[]} />
 
-      <ul className="flex flex-col gap-3">
-        {results.map((ed) => (
-          <li
-            key={ed.edition_id}
-            className="flex items-center gap-3 rounded-lg border border-neutral-200 p-4 transition hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
-          >
-            <CardThumbnail storageKey={ed.image_storage_key} alt={ed.card_name ?? 'Unknown card'} />
-            <div className="flex flex-col gap-1">
-              <div className="flex items-baseline gap-2">
-                <span className="font-medium">{ed.card_name ?? 'Unknown card'}</span>
-                <span className="text-xs text-neutral-500">
-                  {ed.set_name ?? 'Unknown set'}
-                  {ed.collector_number ? ` · #${ed.collector_number}` : ''}
-                </span>
-              </div>
-              <span className="text-xs text-neutral-500">
+        {searchError && <p className="text-sm text-red-400">Search failed: {searchError}</p>}
+
+        {!hasAnyFilter(values) && (
+          <p className="text-sm text-slate-400">
+            Type part of a card&apos;s name, or use the filters above, to browse the catalog.{' '}
+            <Link href="/login" className="underline">
+              Sign in
+            </Link>{' '}
+            to track your own collection and lend cards to friends.
+          </p>
+        )}
+
+        {hasAnyFilter(values) && results.length === 0 && !searchError && (
+          <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
+            <p className="font-medium">Nothing matched those filters</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {results.map((ed) => (
+            <CardTile
+              key={ed.edition_id}
+              storageKey={ed.image_storage_key}
+              alt={ed.card_name ?? 'Unknown card'}
+            >
+              <p className="truncate text-sm font-medium">{ed.card_name ?? 'Unknown card'}</p>
+              <p className="truncate text-xs text-slate-400">
+                {ed.set_name ?? 'Unknown set'}
+                {ed.collector_number ? ` · #${ed.collector_number}` : ''}
+              </p>
+              <p className="truncate text-xs text-slate-400">
                 {ed.element ? `${ed.element} · ` : ''}
                 {(ed.finishes ?? []).join(', ') || 'NONFOIL'}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
+              </p>
+            </CardTile>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

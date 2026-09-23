@@ -53,47 +53,47 @@ export function AddFriend() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="username or friend@example.com"
           aria-label="Their username or email address"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+          className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
         />
         <button
           type="submit"
           disabled={pending || !query.trim()}
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {pending ? 'Looking…' : 'Look up'}
         </button>
       </form>
 
       {found === null && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-slate-400">
           No match. Usernames and email addresses must be typed in full — searching by part of
           a name is deliberately not possible. They also need to have signed in at least once.
         </p>
       )}
 
       {found && (
-        <div className="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="flex items-center gap-3 panel p-3">
           <span className="flex-1 text-sm">
             <span className="font-medium">{found.display_name}</span>
             {found.username && (
-              <span className="ml-1.5 text-neutral-500">@{found.username}</span>
+              <span className="ml-1.5 text-slate-400">@{found.username}</span>
             )}
           </span>
           {found.is_self ? (
-            <span className="text-sm text-neutral-500">That is you</span>
+            <span className="text-sm text-slate-400">That is you</span>
           ) : found.is_friend ? (
-            <span className="text-sm text-neutral-500">Already friends</span>
+            <span className="text-sm text-slate-400">Already friends</span>
           ) : sent || found.request_state === 'sent' ? (
-            <span className="text-sm text-neutral-500">Request sent</span>
+            <span className="text-sm text-slate-400">Request sent</span>
           ) : found.request_state === 'received' ? (
-            <span className="text-sm text-neutral-500">
+            <span className="text-sm text-slate-400">
               They already asked you — check your inbox
             </span>
           ) : (
             <button
               onClick={send}
               disabled={pending}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
             >
               Send request
             </button>
@@ -102,7 +102,7 @@ export function AddFriend() {
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}
@@ -129,7 +129,7 @@ export function FriendRow({ id, name }: { id: string; name: string }) {
             })
           }}
           disabled={pending}
-          className="text-sm text-neutral-500 hover:underline disabled:opacity-50"
+          className="text-sm text-slate-400 hover:underline disabled:opacity-50"
         >
           Unfriend
         </button>
@@ -137,7 +137,7 @@ export function FriendRow({ id, name }: { id: string; name: string }) {
       {/* app_unfriend refuses while cards are outstanding (5) and its message
           says how many and what to do, so it is shown verbatim. */}
       {error && (
-        <p role="alert" className="mt-1.5 text-sm text-red-600">
+        <p role="alert" className="mt-1.5 text-sm text-red-400">
           {error}
         </p>
       )}
@@ -154,7 +154,7 @@ export function OutgoingRow({ id, name }: { id: string; name: string }) {
       <div className="flex items-center gap-3">
         <span className="flex-1 text-sm">
           <span className="font-medium">{name}</span>
-          <span className="text-neutral-500"> hasn&apos;t answered yet</span>
+          <span className="text-slate-400"> hasn&apos;t answered yet</span>
         </span>
         <button
           onClick={() => {
@@ -167,13 +167,13 @@ export function OutgoingRow({ id, name }: { id: string; name: string }) {
             })
           }}
           disabled={pending}
-          className="text-sm text-neutral-500 hover:underline disabled:opacity-50"
+          className="text-sm text-slate-400 hover:underline disabled:opacity-50"
         >
           Withdraw
         </button>
       </div>
       {error && (
-        <p role="alert" className="mt-1.5 text-sm text-red-600">
+        <p role="alert" className="mt-1.5 text-sm text-red-400">
           {error}
         </p>
       )}
@@ -193,7 +193,7 @@ export function GameShares({
   const [pending, start] = useTransition()
 
   if (games.length === 0) {
-    return <p className="text-sm text-neutral-500">No games in the catalog yet.</p>
+    return <p className="text-sm text-slate-400">No games in the catalog yet.</p>
   }
 
   function toggle(gameId: string, next: boolean) {
@@ -238,12 +238,12 @@ export function GameShares({
           />
           <span>{g.name}</span>
           {!on.has(g.id) && (
-            <span className="text-xs text-neutral-500">— friends see none of these</span>
+            <span className="text-xs text-slate-400">— friends see none of these</span>
           )}
         </label>
       ))}
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}

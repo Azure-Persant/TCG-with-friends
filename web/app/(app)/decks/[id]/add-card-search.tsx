@@ -59,9 +59,9 @@ export function AddCardSearch({ deckId }: { deckId: string }) {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search for a card to add…"
         aria-label="Search for a card to add"
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-accent dark:border-neutral-700 dark:bg-neutral-950"
+        className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
       />
-      {loading && <p className="text-xs text-neutral-500">Searching…</p>}
+      {loading && <p className="text-xs text-slate-400">Searching…</p>}
       {visibleResults.length > 0 && (
         <ul className="flex flex-col gap-2">
           {visibleResults.map((r) => (
@@ -105,16 +105,16 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
   }
 
   return (
-    <li className="flex items-center gap-2 rounded-lg border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+    <li className="flex items-center gap-2 panel p-2 text-sm">
       <CardThumbnail storageKey={row.image_storage_key} alt={row.card_name ?? 'Unknown card'} />
       <div className="flex flex-1 flex-col gap-0.5">
         <span className="font-medium">{row.card_name}</span>
-        <span className="text-xs text-neutral-500">{row.set_name ?? 'Unknown set'}</span>
+        <span className="text-xs text-slate-400">{row.set_name ?? 'Unknown set'}</span>
       </div>
       <select
         value={section}
         onChange={(e) => setSection(e.target.value as typeof section)}
-        className="rounded-md border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+        className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
       >
         {/* Only the section this card is actually eligible for -- app_set_deck_card
             rejects a Champion/Regalia in Main and everything else in Material, so
@@ -125,7 +125,7 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
       <select
         value={finish}
         onChange={(e) => setFinish(e.target.value)}
-        className="rounded-md border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+        className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
       >
         {available.map((f) => (
           <option key={f} value={f}>
@@ -139,7 +139,7 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
         max={maxQty}
         value={qty}
         onChange={(e) => setQty(Math.min(maxQty, Math.max(1, Number(e.target.value) || 1)))}
-        className="w-12 rounded-md border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+        className="w-12 rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs text-slate-100"
       />
       <button
         type="button"
@@ -149,7 +149,7 @@ function AddResultRow({ deckId, row }: { deckId: string; row: SearchRow }) {
       >
         Add
       </button>
-      {message && <span className="text-xs text-neutral-500">{message}</span>}
+      {message && <span className="text-xs text-slate-400">{message}</span>}
     </li>
   )
 }

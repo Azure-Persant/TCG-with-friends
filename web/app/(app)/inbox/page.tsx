@@ -46,9 +46,9 @@ export default async function InboxPage() {
 
   if (!requests || requests.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+      <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
         <p className="font-medium">Nothing waiting on you</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Friend requests, loans, borrows and trades all land here.
         </p>
       </div>

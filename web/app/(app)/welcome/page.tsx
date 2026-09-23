@@ -32,7 +32,7 @@ export default async function WelcomePage() {
       <h1 className="text-xl font-semibold tracking-tight">
         Welcome{account?.display_name ? `, ${account.display_name}` : ''}
       </h1>
-      <p className="mt-2 text-sm text-neutral-500">
+      <p className="mt-2 text-sm text-slate-400">
         Pick a username. It is how friends add you — something you can say out loud rather
         than spelling out an email address.
       </p>

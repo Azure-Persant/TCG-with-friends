@@ -35,7 +35,7 @@ export default async function LocationsPage() {
     <div className="flex flex-col gap-8">
       <section>
         <h2 className="text-sm font-semibold">Where you keep cards</h2>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-slate-400">
           Boxes, binders, shelves — whatever you actually use. Friends never see these, only
           what you own (14).
         </p>

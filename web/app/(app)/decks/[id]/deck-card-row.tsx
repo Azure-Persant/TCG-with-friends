@@ -49,7 +49,7 @@ export function DeckCardRow({ row }: { row: Row }) {
       <div className="flex flex-1 flex-col gap-0.5">
         <div className="flex items-baseline gap-2">
           <span className="font-medium">{row.cardName}</span>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-slate-400">
             {row.setName ?? 'Unknown set'}
             {row.collectorNumber ? ` · #${row.collectorNumber}` : ''}
             {row.finish === 'FOIL' ? ' · Foil' : ''}
@@ -60,14 +60,14 @@ export function DeckCardRow({ row }: { row: Row }) {
             Missing {missing} from your collection
           </span>
         )}
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-red-400">{error}</span>}
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => commit(qty - 1)}
           disabled={pending || qty <= 0}
-          className="h-7 w-7 rounded-md border border-neutral-300 text-sm disabled:opacity-50 dark:border-neutral-700"
+          className="h-7 w-7 rounded-md border border-slate-700 text-sm text-slate-300 disabled:opacity-50"
           aria-label={`Remove one ${row.cardName}`}
         >
           –
@@ -77,7 +77,7 @@ export function DeckCardRow({ row }: { row: Row }) {
           type="button"
           onClick={() => commit(qty + 1)}
           disabled={pending}
-          className="h-7 w-7 rounded-md border border-neutral-300 text-sm disabled:opacity-50 dark:border-neutral-700"
+          className="h-7 w-7 rounded-md border border-slate-700 text-sm text-slate-300 disabled:opacity-50"
           aria-label={`Add one ${row.cardName}`}
         >
           +

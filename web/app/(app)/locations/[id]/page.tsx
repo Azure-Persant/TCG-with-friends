@@ -56,7 +56,7 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Link href="/locations" className="text-sm text-neutral-500 hover:underline">
+        <Link href="/locations" className="text-sm text-slate-400 hover:underline">
           ← All boxes
         </Link>
         <h2 className="mt-2 flex items-baseline gap-2 text-lg font-semibold">
@@ -67,7 +67,7 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
             </span>
           )}
         </h2>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-slate-400">
           {total === 0
             ? 'Empty'
             : `${total} card${total === 1 ? '' : 's'} in ${rows.length} ${
@@ -77,37 +77,37 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
       </div>
 
       {error && (
-        <p className="text-sm text-red-600">Could not load this box: {error.message}</p>
+        <p className="text-sm text-red-400">Could not load this box: {error.message}</p>
       )}
 
       {sorted.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+        <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
           <p className="font-medium">Nothing in here</p>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-slate-400">
             Add cards and choose this box, and they will show up here.
           </p>
           <Link
             href="/add"
-            className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+            className="mt-4 inline-block rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
           >
             Add cards
           </Link>
         </div>
       ) : (
-        <ul className="divide-y divide-neutral-100 dark:divide-neutral-900">
+        <ul className="divide-y divide-white/10">
           {sorted.map((r, i) => (
             <li key={i} className="flex items-baseline gap-3 py-2 text-sm">
-              <span className="w-8 tabular-nums text-neutral-500">{r.qty}×</span>
+              <span className="w-8 tabular-nums text-slate-400">{r.qty}×</span>
               <span className="flex-1">
                 <span className="font-medium">
                   {r.card_edition?.card?.name ?? 'Unknown card'}
                 </span>
-                <span className="ml-2 text-xs text-neutral-500">
+                <span className="ml-2 text-xs text-slate-400">
                   {r.card_edition?.card_set?.name ?? 'Unknown set'}
                   {r.card_edition?.collector_number ? ` · #${r.card_edition.collector_number}` : ''}
                 </span>
               </span>
-              <span className="text-xs text-neutral-500">
+              <span className="text-xs text-slate-400">
                 {r.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {r.condition}
               </span>
             </li>

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { CardThumbnail } from '@/app/_components/card-thumbnail'
+import { CardTile } from '@/app/_components/card-tile'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,27 +76,29 @@ export default async function CollectionPage() {
                 with someone else
               </span>
             )}
-            <span className="ml-auto text-xs font-normal text-neutral-500">
+            <span className="ml-auto text-xs font-normal text-slate-400">
               {group.rows.reduce((n, r) => n + r.qty, 0)} cards
             </span>
           </h2>
-          <ul className="mt-2 divide-y divide-neutral-100 dark:divide-neutral-900">
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {group.rows.map((row, i) => (
-              <li key={i} className="flex items-center gap-3 py-2 text-sm">
-                <CardThumbnail
-                  storageKey={
-                    row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
-                  }
-                  alt={row.card_edition?.card?.name ?? 'Unknown card'}
-                />
-                <span className="w-8 tabular-nums text-neutral-500">{row.qty}×</span>
-                <span className="font-medium">{row.card_edition?.card?.name ?? 'Unknown card'}</span>
-                <span className="text-xs text-neutral-500">
+              <CardTile
+                key={i}
+                storageKey={
+                  row.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null
+                }
+                alt={row.card_edition?.card?.name ?? 'Unknown card'}
+              >
+                <p className="truncate text-sm font-medium">
+                  <span className="tabular-nums text-slate-400">{row.qty}×</span>{' '}
+                  {row.card_edition?.card?.name ?? 'Unknown card'}
+                </p>
+                <p className="text-xs text-slate-400">
                   {row.finish === 'FOIL' ? 'Foil' : 'Nonfoil'} · {row.condition}
-                </span>
-              </li>
+                </p>
+              </CardTile>
             ))}
-          </ul>
+          </div>
         </section>
       ))}
     </div>
@@ -105,9 +107,9 @@ export default async function CollectionPage() {
 
 function Empty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
+    <div className="rounded-lg border border-dashed border-white/20 p-8 text-center">
       <p className="font-medium">{title}</p>
-      <p className="mt-1 text-sm text-neutral-500">{body}</p>
+      <p className="mt-1 text-sm text-slate-400">{body}</p>
     </div>
   )
 }

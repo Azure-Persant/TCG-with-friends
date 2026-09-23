@@ -42,9 +42,9 @@ export function UsernameForm({ suggestion }: { suggestion: string }) {
         autoFocus
         autoComplete="off"
         placeholder="jon"
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+        className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent"
       />
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-slate-400">
         3–20 characters. Letters, numbers, hyphens and underscores. Not case-sensitive, so{' '}
         <span className="font-medium">Jon</span> and <span className="font-medium">jon</span> are
         the same name.
@@ -52,12 +52,12 @@ export function UsernameForm({ suggestion }: { suggestion: string }) {
       <button
         type="submit"
         disabled={pending || !looksValid}
-        className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
       >
         {pending ? 'Claiming…' : 'Continue'}
       </button>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-400">
           {error}
         </p>
       )}

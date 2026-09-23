@@ -1,29 +1,55 @@
 @import "tailwindcss";
 
+/*
+ * This app is always dark -- there is no light theme to preserve. Every
+ * `dark:` utility already scattered through the app (written back when this
+ * followed the OS preference) now applies unconditionally, which is what
+ * makes forcing the `dark` class such a large lever for so little code: it
+ * turns the existing neutral-900/950 dark variants into the default, with
+ * nothing per-page to touch.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --accent: #0f766e;
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --accent: #22d3ee; /* cyan-400 -- the interactive colour throughout */
+  --primary: #7c3aed; /* violet-600 -- the page-background gradient only */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --accent: #2dd4bf;
-  }
+  --color-primary: var(--primary);
+  --font-sans: var(--font-work-sans);
+  --font-heading: var(--font-jakarta);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+@layer components {
+  /* The gradient every authenticated page sits on. */
+  .app-backdrop {
+    background-image: linear-gradient(to bottom right, #0f172a, #4c1d95, #0f172a);
+    min-height: 100dvh;
+  }
+
+  /* A translucent glass panel over the gradient -- the card/list container
+     shape used throughout, replacing the old flat neutral-900 panels. */
+  .panel {
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .panel-solid {
+    border-radius: 0.75rem;
+    border: 1px solid rgb(51 65 85); /* slate-700 */
+    background-color: rgb(30 41 59); /* slate-800 */
+  }
 }

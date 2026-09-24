@@ -150,7 +150,7 @@ Seven suites, all rolled back at the end so they change nothing:
 | `tests/rpc_smoke.sql` | A whole loan lifecycle through the RPCs |
 | `tests/request_smoke.sql` | Requests, trades, counter-offers, listings |
 | `tests/auth_smoke.sql` | The `auth.users` → `account` bridge |
-| `tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, and RLS on `deck`/`deck_card` |
+| `tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, cover art, and RLS on `deck`/`deck_card` |
 | `tests/collection_share_smoke.sql` | Collection-sharing tokens: create/revoke/delete, resolution as a guest with no `auth.uid()`, and that a revoked/expired/unknown token all resolve to nothing |
 
 ```bash

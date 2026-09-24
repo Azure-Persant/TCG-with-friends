@@ -308,7 +308,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `db/tests/rpc_smoke.sql` | Full loan lifecycle through the RPCs, as an unprivileged role. |
 | `db/tests/request_smoke.sql` | Requests, trades, counter-offers, listings. |
 | `db/tests/auth_smoke.sql` | The auth.users -> account bridge. |
-| `db/tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, RLS (§8). |
+| `db/tests/deck_smoke.sql` | Deck copy limits, section caps, the Standard-legality check, cover art, RLS (§8). |
 | `db/tests/collection_share_smoke.sql` | Share tokens: create/revoke/delete, and guest resolution with no `auth.uid()` at all (§11). |
 | `db/auth_bridge.sql` | Provisions an account per auth user (31), defaults `selected_game_id` (§9.2). |
 | `db/apply.mjs` | Builds a throwaway local/CI database from the files above. |
@@ -518,7 +518,11 @@ app (#38), and surfacing the restricted-card badge in the UI (#39) — the
 retired Softgen prototype had all of these; this project's deck builder
 intentionally shipped without them so the legality engine could be gotten
 right first. #38 and #39 have since shipped (app-wide, via `CardTile`'s
-`foil`/`restricted` props and `FoilOverlay`); #32–#37 remain open.
+`foil`/`restricted` props and `FoilOverlay`), and so has #32: `deck.cover_edition_id`
+plus `app_set_deck_cover`, which accepts any printing of any card in the deck
+(checked by card, not exact edition, so alternate arts count) and is only
+checked at the moment of choosing. The picker (`decks/deck-art-picker.tsx`)
+loads its options only when opened. #33–#37 remain open.
 
 ## 9. Visual design, navigation and game selection
 
@@ -762,10 +766,10 @@ merged and live in production.
   provider account and API key only the user can create — deferred)
 
 *Softgen-parity work, filed after reading its actual source (§9.1):*
-- **#32**–**#37** — deck cover art, decklist import/export, public deck
-  showcase, deck sharing via link, deck duplication, per-deck-card foil/
-  printing swap (all detailed in §8). These were the next batch in progress
-  when this was written, planned in dependency order: #32 → #33 → #37 →
+- **#33**–**#37** — decklist import/export, public deck showcase, deck
+  sharing via link, deck duplication, per-deck-card foil/printing swap (all
+  detailed in §8; #32, cover art, is done). The batch in progress, planned
+  in dependency order: #33 → #37 →
   #34 + #35 together (they share "a deck readable by a non-owner"
   groundwork, and #35 should copy §11's token pattern) → #36 (needs a deck
   someone else can legitimately read first).

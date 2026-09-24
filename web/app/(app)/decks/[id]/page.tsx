@@ -36,7 +36,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
   // is not the caller's own returns no row either way -- the two cases are
   // deliberately indistinguishable, same reasoning as the sharing functions
   // in the retired Softgen app's HANDOFF (issue #22 will need the same care).
-  const { data: deck } = await supabase.from('deck').select('id, name').eq('id', id).maybeSingle()
+  const { data: deck } = await supabase.from('deck').select('id, name, cover_edition_id').eq('id', id).maybeSingle()
   if (!deck) notFound()
 
   const [{ data: cards }, { data: summaryRows }, { data: holdings }] = await Promise.all([
@@ -92,7 +92,13 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="flex flex-col gap-8">
-      <DeckHeader deckId={id} name={deck.name} summary={summary} missingTotal={missingTotal} />
+      <DeckHeader
+        deckId={id}
+        name={deck.name}
+        coverEditionId={deck.cover_edition_id}
+        summary={summary}
+        missingTotal={missingTotal}
+      />
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-white">Add cards</h2>

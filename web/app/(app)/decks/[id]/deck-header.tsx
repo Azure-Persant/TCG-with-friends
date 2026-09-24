@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { renameDeck } from './actions'
+import { DeckArtPicker } from '../deck-art-picker'
 
 type Summary = {
   material_count: number
@@ -15,11 +16,13 @@ type Summary = {
 export function DeckHeader({
   deckId,
   name,
+  coverEditionId,
   summary,
   missingTotal,
 }: {
   deckId: string
   name: string
+  coverEditionId: string | null
   summary: Summary
   missingTotal: number
 }) {
@@ -45,13 +48,23 @@ export function DeckHeader({
 
   return (
     <div className="flex flex-col gap-3">
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={save}
-        disabled={pending}
-        className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 font-heading text-2xl font-bold tracking-tight text-white outline-none focus:border-accent disabled:opacity-50"
-      />
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={save}
+          disabled={pending}
+          aria-label="Deck name"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 font-heading text-2xl font-bold tracking-tight text-white outline-none focus:border-accent disabled:opacity-50"
+        />
+        <DeckArtPicker
+          deckId={deckId}
+          currentEditionId={coverEditionId}
+          className="shrink-0 rounded-md border border-slate-700 px-3 text-sm text-slate-300 hover:bg-white/10"
+        >
+          Choose art
+        </DeckArtPicker>
+      </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="panel-solid flex flex-wrap items-center gap-x-8 gap-y-3 p-4">

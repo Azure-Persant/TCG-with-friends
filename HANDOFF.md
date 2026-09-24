@@ -7,8 +7,9 @@ future me.
 implemented as Postgres functions, catalog **imported for real** (63 sets,
 ~2,500 cards, ~4,900 editions) with images backfilled to Supabase Storage, and
 a Next.js app covering sign-in, a public catalog browser with filters, your
-collection, the request inbox, the friends/lending UI, a deck builder, a
-card detail view, and public collection sharing — all live in production.
+collection (with per-card editing and bulk moves), the request inbox, the
+friends/lending UI, a deck builder, a card detail view, and public
+collection sharing — all live in production.
 
 Loans, borrows, trades, friend requests and sub-loans are all implemented and
 tested, reachable from the app rather than only from the RPCs. Everyone gets a
@@ -26,6 +27,37 @@ model with no data-model rework needed.
 Stack decisions made: **Supabase** (managed Postgres), **Next.js App Router**,
 **mobile-first responsive web**, **magic link + Google** sign-in, and
 **invariants enforced in Postgres RPC** rather than app code.
+
+---
+
+## How work gets done here
+
+The working agreement with the owner, settled over many PRs — follow it
+unless told otherwise:
+
+1. **One issue (or a tight follow-up) per branch and PR**, branched from an
+   up-to-date `main`. Never stack a PR on another unmerged branch; if a new
+   feature would reuse something still in review, keep it independent and
+   note the follow-up instead.
+2. **Verify before pushing.** Web: `tsc --noEmit`, `eslint`, `next build`.
+   Database changes additionally: all test suites against a throwaway local
+   Postgres (`npm test` in `db/`), each new assertion's `NOTICE` checked
+   directly, and the drift guard reproduced locally (§7).
+3. **Any DB change ships as a migration the owner applies by hand.** Paste
+   the migration's SQL in chat for them to run in the Supabase SQL editor.
+   Never handle database credentials or run `db push` against the live
+   project yourself.
+4. **The owner verifies signed-in pages on the Vercel preview** (get its URL
+   from the PR's deployment status via `gh api .../deployments`); verify
+   public pages (`/cards`, `/shared/...`) yourself in the browser. Remember
+   the preview, not production, is where an unmerged PR's UI lives — running
+   the SQL alone changes nothing visible.
+5. **Merge only on an explicit "merge it"**, then close the linked issue
+   with a comment pointing at the PR and delete the branch.
+6. **Scope questions get asked, not guessed** — when an answer widens an
+   issue, file the extra work as its own issue rather than bundling it in
+   (#47 and #48 came out of #22 this way).
+7. Keep this file and the READMEs current as work lands.
 
 ---
 
@@ -288,6 +320,7 @@ became explicit when the smoke test tripped over it on a final return.
 | `web/app/_components/card-tile.tsx`, `card-thumbnail.tsx` | The two card-art shapes: grid tile vs. row thumbnail. |
 | `web/app/_components/card-detail-dialog.tsx` | Full card text/stats plus a printings switcher (§10, issue #23). |
 | `web/app/_components/filter-bar.tsx` | The `/cards`+`/add` element/type/subtype/class/cost filter UI. |
+| `web/app/(app)/collection/edit-holding.tsx`, `collection-grid.tsx` | Per-tile edit (qty/condition/finish/box) and bulk select-and-move (§12). |
 | `web/app/(app)/collection/share/` | Create/revoke/delete public share links (§11, issue #22). |
 | `web/app/shared/[token]/` | The public, read-only page a share link opens — no account needed. |
 | `.github/workflows/ingest.yml` | Populate the catalog from the Actions tab. |
@@ -484,7 +517,8 @@ foil/printing swap (#37), the foil shimmer visual treatment anywhere in the
 app (#38), and surfacing the restricted-card badge in the UI (#39) — the
 retired Softgen prototype had all of these; this project's deck builder
 intentionally shipped without them so the legality engine could be gotten
-right first.
+right first. #38 and #39 have since shipped (app-wide, via `CardTile`'s
+`foil`/`restricted` props and `FoilOverlay`); #32–#37 remain open.
 
 ## 9. Visual design, navigation and game selection
 
@@ -517,11 +551,11 @@ one pass, each ported with the real classNames rather than approximated.
 
 **Real functionality gaps got filed as issues, not faked as UI.** The
 reference's collection tile has a bulk-select checkbox and a working Edit
-button; this app currently has **no way to reduce or delete a holding**
-at all (only `app_add_cards` and `app_move_cards`, same quantity, exist).
-Rather than add a checkbox/button that goes nowhere, that gap is #29 (edit/
-remove a holding) and #30 (bulk-select + move) — real RPCs and UI, tracked
-properly.
+button; at the time this app had **no way to reduce or delete a holding**
+at all (only `app_add_cards` and `app_move_cards`, same quantity, existed).
+Rather than add a checkbox/button that went nowhere, that gap became #29
+(edit/remove a holding) and #30 (bulk-select + move) — both since built as
+real RPCs and UI (§12).
 
 **This app is now permanently dark** (see the new trap above, §7) — a
 deliberate simplification from following the OS preference, since the
@@ -584,7 +618,7 @@ touched. Fixed by extracting `TopNav` into one shared component both
 `/cards` and the `(app)` layout render from the same auth check, so the two
 surfaces can't drift apart again.
 
-## 10. Card detail view (#23)
+## 10. Card detail view (#23, closed)
 
 The lightbox added for #19 only enlarged the art. `CardTile` now takes an
 optional `onOpenDetail`, which — when passed — replaces that lightbox with
@@ -609,7 +643,7 @@ Wired into `/cards` and `/add` only, per the issue's own scope. `/collection`
 and the deck builder keep their plain art-only lightbox for now — nothing
 stops `onOpenDetail` reaching them later, it just wasn't asked for here.
 
-## 11. Collection sharing (#22)
+## 11. Collection sharing (#22, closed)
 
 A public, read-only link to your collection — reachable by anyone who has
 the URL, no account needed, generated from `/collection/share` and opened at
@@ -667,19 +701,59 @@ to build those inside this issue's schema — they don't share one.
 
 ---
 
-## 12. Next steps
+## 12. Editing holdings and bulk moves (#29, #30, closed)
+
+Each physical-box tile on `/collection` has an **Edit** control; lent-out
+("with someone else") tiles don't, since none of these RPCs accept a holder
+location. A **Select** toggle swaps the Edit controls for checkboxes and a
+"move N cards to box X" bar.
+
+**Four single-axis primitives, never one combined edit:**
+
+| Change | RPC | Notes |
+|---|---|---|
+| Quantity | `app_set_holding` | Absolute set on one bucket, like `app_set_deck_card`. `qty = 0` deletes (UI confirms first). |
+| Condition | `app_set_condition` | Moves the tile's whole qty to another condition, same box. |
+| Finish | `app_set_finish` | Same shape. The composite FK to `card_edition_finish` rejects a finish the printing doesn't have; the UI only offers valid ones anyway. |
+| Box | `app_move_cards` | Pre-existing — reused, not duplicated. |
+
+Why not one "edit everything" RPC: if a single submit changed quantity *and*
+condition from "5 NM" to "3 LP", it would have to guess between "move 3,
+keep 2 NM" and "throw away 2, relabel the rest". Each dropdown instead acts
+immediately on the current quantity, so no action is ambiguous. The first
+cut shipped only quantity and condition; the owner asked for box and finish
+on top (#51) — that's why they arrived as a follow-up PR.
+
+Bulk move (#30) needed no new RPC: it calls `app_move_cards` once per
+selected tile (`Promise.all`), skips tiles already in the target box, and
+reports partial failures by count. Selection keys off
+`(editionId, locationId, finish, condition)`, not array index, because the
+search filter reorders rows.
+
+**Trap worth knowing before touching `db/tests/rpc_smoke.sql`:** that file is
+one long running story, and its last assertion checks the owner's *total*
+card count exactly (it expects 3, after one write-off). Any new test that adds
+or removes cards without putting them back breaks that assertion far
+downstream of the actual change. The #29 tests therefore work on buckets
+nothing else in the file reads (Box A's FOIL copy, Box B's NONFOIL copy) and
+restore them afterward. Check `grep qty_at`/`sum(qty)` in that file before
+adding to it — or write a separate suite.
+
+---
+
+## 13. Next steps
 
 Done: auth wiring, catalog import + images + filters, inventory entry
 (`/add`, `/locations`), loan flows (`/lend`, `/friends`), a deck builder
 (§8), the visual redesign + game-selection landing page (§9), letting the
 owner pick a box per card on borrow approval (#12), a card detail view
 (§10, #23), a profile page for display name/username (#40), the foil
-shimmer treatment and a restricted-card badge (#38, #39), and public
-collection sharing (§11, #22) — all live in production except #22 and #23,
-which are open PRs as of this writing rather than merged yet.
+shimmer treatment and a restricted-card badge (#38, #39), public collection
+sharing (§11, #22), and editing/bulk-moving holdings (§12, #29, #30) — all
+merged and live in production.
 
 **Open work is tracked as GitHub issues, not in this file.** As of
-2026-09-23, all open:
+2026-09-24, all open:
 
 *Carried over, blocked on the user's own credentials/inbox, not code:*
 - **#13** — verify email-code sign-in works for a brand new account
@@ -688,12 +762,13 @@ which are open PRs as of this writing rather than merged yet.
   provider account and API key only the user can create — deferred)
 
 *Softgen-parity work, filed after reading its actual source (§9.1):*
-- **#29** — edit or remove a holding (real gap: no way to decrease/delete
-  one today, only add and move)
-- **#30** — bulk-select and move cards on `/collection`
 - **#32**–**#37** — deck cover art, decklist import/export, public deck
   showcase, deck sharing via link, deck duplication, per-deck-card foil/
-  printing swap (all detailed in §8)
+  printing swap (all detailed in §8). These were the next batch in progress
+  when this was written, planned in dependency order: #32 → #33 → #37 →
+  #34 + #35 together (they share "a deck readable by a non-owner"
+  groundwork, and #35 should copy §11's token pattern) → #36 (needs a deck
+  someone else can legitimately read first).
 - **#41** — choose which printing represents a card on the collection grid
   (low priority; deliberately deferred until #23's printing-merge behavior
   actually lands on `/collection` — today each holding row is already one

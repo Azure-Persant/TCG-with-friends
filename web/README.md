@@ -192,7 +192,10 @@ retired Softgen prototype's actual source rather than invented fresh — see
   signed in (the "Browse Cards" nav item) and signed out. Clicking a card
   opens a detail dialog (full text/stats, a printings switcher).
 - `/collection` — your holdings, grouped by where they are, with lent-out
-  cards flagged, a live client-side name search, and unique/total card counts
+  cards flagged, a live client-side name search, and unique/total card counts.
+  Each tile in one of your own boxes has an Edit control (quantity — 0
+  removes it — condition, finish, and box, each applied on its own), and a
+  Select toggle lets you move many cards to another box at once
 - `/add` — search the catalog and put copies in a box; also opens the card
   detail dialog
 - `/decks`, `/decks/[id]` — build Standard Constructed decks: material/main/

@@ -64,3 +64,61 @@ export async function setHoldingCondition(formData: FormData): Promise<Result> {
   revalidatePath('/collection')
   return { ok: true }
 }
+
+/** Recategorise a holding's finish in place (29 follow-up), same box, same qty. */
+export async function setHoldingFinish(formData: FormData): Promise<Result> {
+  const editionId = String(formData.get('editionId') ?? '')
+  const locationId = String(formData.get('locationId') ?? '')
+  const condition = String(formData.get('condition') ?? '')
+  const fromFinish = String(formData.get('fromFinish') ?? '')
+  const toFinish = String(formData.get('toFinish') ?? '')
+  const qty = Number(formData.get('qty') ?? '')
+
+  if (!editionId || !locationId || !condition || !fromFinish || !toFinish || !Number.isFinite(qty)) {
+    return { ok: false, error: 'Missing field' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('app_set_finish', {
+    p_edition: editionId,
+    p_location: locationId,
+    p_condition: condition,
+    p_from_finish: fromFinish,
+    p_to_finish: toFinish,
+    p_qty: qty,
+  })
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/collection')
+  return { ok: true }
+}
+
+/** Move a holding to a different box (29 follow-up), same finish/condition/qty. */
+export async function moveHolding(formData: FormData): Promise<Result> {
+  const editionId = String(formData.get('editionId') ?? '')
+  const finish = String(formData.get('finish') ?? '')
+  const condition = String(formData.get('condition') ?? '')
+  const fromLocationId = String(formData.get('fromLocationId') ?? '')
+  const toLocationId = String(formData.get('toLocationId') ?? '')
+  const qty = Number(formData.get('qty') ?? '')
+
+  if (!editionId || !finish || !condition || !fromLocationId || !toLocationId || !Number.isFinite(qty)) {
+    return { ok: false, error: 'Missing field' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('app_move_cards', {
+    p_edition: editionId,
+    p_finish: finish,
+    p_from: fromLocationId,
+    p_to: toLocationId,
+    p_condition: condition,
+    p_qty: qty,
+  })
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/collection')
+  return { ok: true }
+}

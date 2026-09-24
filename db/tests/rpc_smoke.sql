@@ -207,6 +207,39 @@ DO $$ BEGIN
     'Box A''s FOIL bucket should be back to its original 1 copy';
 END $$;
 
+-- app_set_finish: the finish-axis sibling of app_set_condition, tested on
+-- Box B's NONFOIL NM copy -- the earlier move put it there and nothing
+-- checks its finish specifically afterward, so recategorising it (a pure
+-- swap, net zero for the account total either way) is safe to leave in
+-- place rather than restore.
+SELECT app_set_finish('a0000000-0000-0000-0000-000000000004',
+                      'c0000000-0000-0000-0000-000000000002', 'NM', 'NONFOIL', 'FOIL', 1);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000002', 'NM', 'NONFOIL') = 0,
+    '(29) the old-finish bucket should be gone once every copy moved';
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000002', 'NM', 'FOIL') = 1,
+    '(29) the new-finish bucket should hold the moved copy';
+  RAISE NOTICE 'ok  (29) app_set_finish recategorises copies within the same box';
+END $$;
+
+SELECT pg_temp.must_fail($$
+  SELECT app_set_finish('a0000000-0000-0000-0000-000000000004',
+                        'c0000000-0000-0000-0000-000000000002', 'NM', 'FOIL', 'FOIL', 1)
+$$, 'app_set_finish with the same finish on both sides');
+
+SELECT pg_temp.must_fail($$
+  SELECT app_set_finish('a0000000-0000-0000-0000-000000000004',
+                        'c0000000-0000-0000-0000-000000000002', 'NM', 'FOIL', 'NONFOIL', 99)
+$$, 'app_set_finish moving more cards than the bucket holds');
+
+-- Move it back so Box B reads the same as the original fixture left it.
+SELECT app_set_finish('a0000000-0000-0000-0000-000000000004',
+                      'c0000000-0000-0000-0000-000000000002', 'NM', 'FOIL', 'NONFOIL', 1);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000002', 'NM', 'NONFOIL') = 1,
+    'Box B should be back to its original 1 NONFOIL NM copy';
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- (a) Lending requires an accepted friendship
 -- ---------------------------------------------------------------------------

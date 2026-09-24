@@ -13,6 +13,9 @@ export type Row = {
   cardName: string
   storageKey: string | null
   restricted: boolean
+  /** Finishes this printing actually comes in -- a nonfoil-only edition
+   *  should not offer switching to foil (21), same reasoning as /add. */
+  availableFinishes: string[]
 }
 
 export type Group = { name: string; isHolder: boolean; rows: Row[] }
@@ -25,7 +28,13 @@ export type Group = { name: string; isHolder: boolean; rows: Row[] }
  * with nothing matching just doesn't render, rather than flattening
  * everything into one list the way the old app's ungrouped view did.
  */
-export function CollectionGrid({ groups }: { groups: Group[] }) {
+export function CollectionGrid({
+  groups,
+  locations,
+}: {
+  groups: Group[]
+  locations: { id: string; name: string | null }[]
+}) {
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
 
@@ -79,6 +88,8 @@ export function CollectionGrid({ groups }: { groups: Group[] }) {
                       locationId={row.locationId}
                       condition={row.condition}
                       qty={row.qty}
+                      availableFinishes={row.availableFinishes}
+                      locations={locations}
                     />
                   )}
                 </CardTile>

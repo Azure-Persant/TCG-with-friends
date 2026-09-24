@@ -15,6 +15,7 @@ type HoldingRow = {
     collector_number: string | null
     card: { name: string; attributes: Record<string, unknown> } | null
     card_image: { storage_key: string; variant: string }[] | null
+    card_edition_finish: { finish: string }[] | null
   } | null
 }
 
@@ -24,14 +25,18 @@ export default async function CollectionPage() {
   // No .eq('account_id', …) anywhere below. RLS already restricts this to the
   // caller's own rows; adding a filter here would imply the security lives in
   // this file, and someone would eventually "clean it up".
-  const { data, error } = await supabase
-    .from('holding')
-    .select(
-      `edition_id, qty, condition, finish,
-       location ( id, name, kind, holder_account_id ),
-       card_edition ( collector_number, card ( name, attributes ), card_image ( storage_key, variant ) )`,
-    )
-    .order('qty', { ascending: false })
+  const [{ data, error }, { data: locations }] = await Promise.all([
+    supabase
+      .from('holding')
+      .select(
+        `edition_id, qty, condition, finish,
+         location ( id, name, kind, holder_account_id ),
+         card_edition ( collector_number, card ( name, attributes ),
+           card_image ( storage_key, variant ), card_edition_finish ( finish ) )`,
+      )
+      .order('qty', { ascending: false }),
+    supabase.from('location').select('id, name').eq('kind', 'physical').order('name'),
+  ])
 
   if (error) {
     return <ErrorBox message={error.message} />
@@ -77,6 +82,7 @@ export default async function CollectionPage() {
       cardName,
       storageKey: h.card_edition?.card_image?.find((im) => im.variant === 'original')?.storage_key ?? null,
       restricted: isRestricted(h.card_edition?.card?.attributes),
+      availableFinishes: (h.card_edition?.card_edition_finish ?? []).map((f) => f.finish),
     })
     uniqueCardNames.add(cardName)
     totalCards += h.qty
@@ -89,7 +95,7 @@ export default async function CollectionPage() {
   return (
     <div className="flex flex-col gap-8">
       <Header uniqueCards={uniqueCardNames.size} totalCards={totalCards} />
-      <CollectionGrid groups={sorted} />
+      <CollectionGrid groups={sorted} locations={locations ?? []} />
     </div>
   )
 }

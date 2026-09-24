@@ -274,6 +274,45 @@ END $$;
 SELECT pg_temp.act_as('e0000000-0000-0000-0000-000000000001');
 
 -- ---------------------------------------------------------------------------
+-- Cover art (#32): any printing of a card in the deck, or NULL
+-- ---------------------------------------------------------------------------
+
+DO $$
+DECLARE
+  v_deck uuid := current_setting('pg_temp.deck')::uuid;
+  v_before timestamptz;
+BEGIN
+  SELECT updated_at INTO v_before FROM deck WHERE id = v_deck;
+
+  -- Both printings of The Champ qualify, whichever one the deck holds.
+  PERFORM app_set_deck_cover(v_deck, 'd0000000-0000-0000-0000-000000000021');
+  PERFORM app_set_deck_cover(v_deck, 'd0000000-0000-0000-0000-000000000022');
+  ASSERT (SELECT cover_edition_id FROM deck WHERE id = v_deck)
+         = 'd0000000-0000-0000-0000-000000000022',
+    '(32) any printing of a card in the deck should be accepted as the cover';
+  ASSERT (SELECT updated_at FROM deck WHERE id = v_deck) = v_before,
+    '(32) choosing a cover must not bump updated_at (it reorders /decks)';
+  RAISE NOTICE 'ok  (32) cover can be any printing of a card in the deck';
+
+  PERFORM app_set_deck_cover(v_deck, NULL);
+  ASSERT (SELECT cover_edition_id FROM deck WHERE id = v_deck) IS NULL,
+    '(32) NULL should clear the cover';
+  RAISE NOTICE 'ok  (32) a NULL cover clears it';
+END $$;
+
+-- The banned card was rejected from the deck earlier, so it is not in it.
+SELECT pg_temp.must_fail(
+  format($$SELECT app_set_deck_cover('%s'::uuid, 'd0000000-0000-0000-0000-000000000025'::uuid)$$,
+         current_setting('pg_temp.deck')),
+  '(32) a cover from a card that is not in the deck');
+
+SELECT pg_temp.act_as('e0000000-0000-0000-0000-000000000002');
+SELECT pg_temp.must_fail(
+  format($$SELECT app_set_deck_cover('%s'::uuid, NULL)$$, current_setting('pg_temp.deck')),
+  '(32) stranger setting the cover of a deck they do not own');
+SELECT pg_temp.act_as('e0000000-0000-0000-0000-000000000001');
+
+-- ---------------------------------------------------------------------------
 -- Rename + delete
 -- ---------------------------------------------------------------------------
 

@@ -1,9 +1,12 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { cardImageUrl } from '@/lib/images'
 import { createDeck, deleteDeck } from './actions'
+import { DeckArtPicker } from './deck-art-picker'
 
 export function NewDeck() {
   const [name, setName] = useState('')
@@ -50,7 +53,16 @@ export function NewDeck() {
   )
 }
 
-type Deck = { id: string; name: string; updated_at: string }
+export type Deck = {
+  id: string
+  name: string
+  updated_at: string
+  cover_edition_id: string | null
+  cover: {
+    card: { name: string } | null
+    card_image: { storage_key: string; variant: string }[] | null
+  } | null
+}
 
 export function DeckList({ decks }: { decks: Deck[] }) {
   if (decks.length === 0) {
@@ -86,24 +98,48 @@ function DeckCard({ deck }: { deck: Deck }) {
     })
   }
 
+  const coverKey = deck.cover?.card_image?.find((i) => i.variant === 'original')?.storage_key ?? null
+  const coverName = deck.cover?.card?.name ?? null
+
   return (
     <div className="overflow-hidden panel transition-colors hover:border-cyan-500/60">
-      {/* No deck cover-art feature yet (the old prototype let you pick a
-          card's art for this) -- this is the same fallback it used for a
-          deck with no cover chosen: an icon centered on a plain dark field. */}
+      {/* A portrait card cropped into a landscape tile: object-[center_30%]
+          keeps the illustration, which sits in roughly the top two-thirds
+          of the card, rather than the rules text. The art-picker button is a
+          sibling of the link, not inside it -- a button nested in an anchor
+          is invalid and swallows clicks. */}
       <div className="relative aspect-video overflow-hidden bg-slate-900">
         <Link
           href={`/decks/${deck.id}`}
           aria-label={`Open ${deck.name}`}
           className="group absolute inset-0 block outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-400"
         >
-          <span className="absolute inset-0 flex items-center justify-center">
-            <LayersIcon className="h-10 w-10 text-slate-700" />
-          </span>
+          {coverKey ? (
+            <Image
+              src={cardImageUrl(coverKey)}
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+              className="object-cover object-[center_30%] transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <span className="absolute inset-0 flex items-center justify-center">
+              <LayersIcon className="h-10 w-10 text-slate-700" />
+            </span>
+          )}
           <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent p-3 pt-8">
             <span className="block truncate text-lg font-bold text-white">{deck.name}</span>
+            {coverName && <span className="block truncate text-xs text-slate-400">Art: {coverName}</span>}
           </span>
         </Link>
+        <DeckArtPicker
+          deckId={deck.id}
+          currentEditionId={deck.cover_edition_id}
+          className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-slate-200 hover:bg-slate-900 hover:text-white"
+        >
+          <ImageIcon className="h-4 w-4" />
+          <span className="sr-only">Choose deck art</span>
+        </DeckArtPicker>
       </div>
 
       <div className="flex flex-col gap-3 p-4">
@@ -143,6 +179,16 @@ function LayersIcon({ className }: { className?: string }) {
       <polygon points="12 2 2 7 12 12 22 7 12 2" />
       <polyline points="2 17 12 22 22 17" />
       <polyline points="2 12 12 17 22 12" />
+    </svg>
+  )
+}
+
+function ImageIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   )
 }

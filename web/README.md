@@ -200,7 +200,9 @@ retired Softgen prototype's actual source rather than invented fresh — see
   detail dialog
 - `/decks`, `/decks/[id]` — build Standard Constructed decks: material/main/
   sideboard sections, live copy-limit and section-cap enforcement, a legality
-  badge, and a missing-from-inventory indicator against your own holdings
+  badge, and a missing-from-inventory indicator against your own holdings.
+  Each deck can pick any printing of one of its cards as cover art for its
+  `/decks` tile
 - `/lend` — offer cards to a friend
 - `/friends` — add friends by username or exact email, and choose which games
   they can see

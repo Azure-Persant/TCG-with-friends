@@ -370,7 +370,14 @@ CREATE TABLE deck (
   account_id  uuid NOT NULL REFERENCES account(id) ON DELETE CASCADE,
   name        text NOT NULL,
   created_at  timestamptz NOT NULL DEFAULT now(),
-  updated_at  timestamptz NOT NULL DEFAULT now()
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+
+  -- The printing whose art represents the deck on /decks (#32). NULL means
+  -- no art chosen -- the tile falls back to an icon. SET NULL, not
+  -- RESTRICT: a catalog edition disappearing should cost the deck its
+  -- picture, not block the ingest. Last in the table because it arrived
+  -- via ALTER TABLE ADD COLUMN (see the drift-guard note on account.username).
+  cover_edition_id uuid REFERENCES card_edition(id) ON DELETE SET NULL
 );
 
 CREATE INDEX deck_account_idx ON deck (account_id);

@@ -6,6 +6,7 @@ import { CollectionGrid, type Group } from './collection-grid'
 export const dynamic = 'force-dynamic'
 
 type HoldingRow = {
+  edition_id: string
   qty: number
   condition: string
   finish: string
@@ -26,7 +27,7 @@ export default async function CollectionPage() {
   const { data, error } = await supabase
     .from('holding')
     .select(
-      `qty, condition, finish,
+      `edition_id, qty, condition, finish,
        location ( id, name, kind, holder_account_id ),
        card_edition ( collector_number, card ( name, attributes ), card_image ( storage_key, variant ) )`,
     )
@@ -68,6 +69,8 @@ export default async function CollectionPage() {
     }
     const cardName = h.card_edition?.card?.name ?? 'Unknown card'
     groups.get(key)!.rows.push({
+      editionId: h.edition_id,
+      locationId: loc?.id ?? '',
       qty: h.qty,
       condition: h.condition,
       finish: h.finish,

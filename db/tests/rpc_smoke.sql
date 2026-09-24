@@ -142,6 +142,72 @@ SELECT pg_temp.must_fail($$
 $$, 'adding cards to someone else''s location');
 
 -- ---------------------------------------------------------------------------
+-- Editing a holding directly (29): app_set_holding, app_set_condition
+--
+-- Uses the FOIL bucket exclusively -- Box A's 1 FOIL NM copy is untouched by
+-- everything else in this file -- and restores it to exactly that by the end,
+-- so the NONFOIL loan lifecycle below, and the final total-quantity
+-- assertion at the bottom of this file, are both undisturbed.
+-- ---------------------------------------------------------------------------
+
+-- Pad the bucket up so there is something to correct back down again.
+SELECT app_add_cards('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                     'c0000000-0000-0000-0000-000000000001', 'NM', 4);
+
+-- Correct a miscount: set the absolute qty down to 3.
+SELECT app_set_holding('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                       'c0000000-0000-0000-0000-000000000001', 'NM', 3);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM', 'FOIL') = 3,
+    '(29) app_set_holding should set the bucket to the given absolute qty';
+  RAISE NOTICE 'ok  (29) app_set_holding corrects a miscount';
+END $$;
+
+-- Recategorise all 3 as Lightly Played.
+SELECT app_set_condition('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                         'c0000000-0000-0000-0000-000000000001', 'NM', 'LP', 3);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM', 'FOIL') = 0,
+    '(29) the old-condition bucket should be gone once every copy moved';
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'LP', 'FOIL') = 3,
+    '(29) the new-condition bucket should hold the moved copies';
+  RAISE NOTICE 'ok  (29) app_set_condition recategorises copies within the same box';
+END $$;
+
+SELECT pg_temp.must_fail($$
+  SELECT app_set_condition('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                           'c0000000-0000-0000-0000-000000000001', 'LP', 'LP', 1)
+$$, 'app_set_condition with the same condition on both sides');
+
+SELECT pg_temp.must_fail($$
+  SELECT app_set_condition('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                           'c0000000-0000-0000-0000-000000000001', 'LP', 'NM', 99)
+$$, 'app_set_condition moving more cards than the bucket holds');
+
+SELECT pg_temp.must_fail($$
+  SELECT app_set_holding('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                         'c0000000-0000-0000-0000-000000000009', 'NM', 1)
+$$, 'app_set_holding on someone else''s location');
+
+-- qty = 0 deletes the row outright, same as a deck card at qty 0 -- then
+-- restore the original 1 FOIL NM so Box A is exactly as the earlier fixture
+-- left it.
+SELECT app_set_holding('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                       'c0000000-0000-0000-0000-000000000001', 'LP', 0);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'LP', 'FOIL') = 0,
+    '(29) app_set_holding at qty 0 should delete the row';
+  RAISE NOTICE 'ok  (29) app_set_holding at qty 0 removes the bucket';
+END $$;
+
+SELECT app_add_cards('a0000000-0000-0000-0000-000000000004', 'FOIL',
+                     'c0000000-0000-0000-0000-000000000001', 'NM', 1);
+DO $$ BEGIN
+  ASSERT pg_temp.qty_at('c0000000-0000-0000-0000-000000000001', 'NM', 'FOIL') = 1,
+    'Box A''s FOIL bucket should be back to its original 1 copy';
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- (a) Lending requires an accepted friendship
 -- ---------------------------------------------------------------------------
 

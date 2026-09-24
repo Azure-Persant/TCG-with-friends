@@ -2,8 +2,11 @@
 
 import { useState } from 'react'
 import { CardTile } from '@/app/_components/card-tile'
+import { EditHolding } from './edit-holding'
 
 export type Row = {
+  editionId: string
+  locationId: string
   qty: number
   condition: string
   finish: string
@@ -69,6 +72,15 @@ export function CollectionGrid({ groups }: { groups: Group[] }) {
                   <span className="mt-auto inline-flex h-8 items-center justify-center rounded-md border border-cyan-500 text-xs font-medium text-cyan-400">
                     Total: {row.qty}
                   </span>
+                  {!group.isHolder && (
+                    <EditHolding
+                      editionId={row.editionId}
+                      finish={row.finish}
+                      locationId={row.locationId}
+                      condition={row.condition}
+                      qty={row.qty}
+                    />
+                  )}
                 </CardTile>
               ))}
             </div>
